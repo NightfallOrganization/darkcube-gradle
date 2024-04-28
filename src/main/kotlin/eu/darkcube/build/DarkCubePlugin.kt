@@ -40,7 +40,7 @@ class DarkCubePlugin : Plugin<Project> {
             }
         }
 
-        project.pluginManager.withPlugin("java") {
+        project.pluginManager.withPlugin("java-base") {
             val javaPluginExtension = project.extensions.getByType<JavaPluginExtension>()
             val toolchainService = project.extensions.getByType<JavaToolchainService>()
 
@@ -69,5 +69,6 @@ class DarkCubePlugin : Plugin<Project> {
         project.tasks.withType<AbstractArchiveTask>().configureEach {
             archiveVersion.convention("")
         }
+        project.extensions.add("sourceRemapper", SourceRemapperExtension(project))
     }
 }
