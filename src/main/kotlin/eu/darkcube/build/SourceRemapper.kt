@@ -2,20 +2,18 @@ package eu.darkcube.build
 
 import org.gradle.api.NamedDomainObjectProvider
 import org.gradle.api.Project
-import org.gradle.api.artifacts.Configuration
-import org.gradle.api.artifacts.Dependency
-import org.gradle.api.artifacts.ModuleVersionIdentifier
-import org.gradle.api.artifacts.ResolvedArtifact
-import org.gradle.api.artifacts.ResolvedDependency
+import org.gradle.api.artifacts.*
+import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository
+import org.gradle.kotlin.dsl.DependencyHandlerScope
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.repositories
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.commons.ClassRemapper
 import org.objectweb.asm.commons.Remapper
+import sun.security.util.Resources_es
 import java.nio.file.Path
-import java.util.HashMap
 import java.util.regex.Matcher
 import java.util.stream.Collectors
 import java.util.zip.ZipEntry
@@ -28,79 +26,107 @@ class SourceRemapperExtension(private val project: Project) {
     private val cachesPathRoot: Path =
         project.gradle.gradleUserHomeDir.toPath().resolve("caches").resolve("darkcube-source-remapper")
     private val cachesPath = cachesPathRoot.resolve(darkcubeHash)
-    private val repositoryPath = cachesPath.resolve("repository")
+    internal val repositoryPath = cachesPath.resolve("repository")
 
     /**
      * Remaps all files in the configuration to the given namespace
      */
     fun remap(configuration: Configuration, namespace: String, target: NamedDomainObjectProvider<Configuration>) {
-        val artifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
+        RemapTask(this, project, configuration, namespace, target).remap()
+    }
 
-        configuration.resolvedConfiguration.firstLevelModuleDependencies.forEach {
-            collect(artifacts, it)
+    private fun remap(
+        artifacts: Map<ModuleVersionIdentifier, PreparedModule>,
+        sourceArtifacts: Map<ModuleVersionIdentifier, PreparedModule>,
+        identifier: ModuleVersionIdentifier,
+        namespace: String,
+        target: NamedDomainObjectProvider<Configuration>
+    ) {
+
+    }
+
+}
+
+private fun Path.verifyIntegrity(): Boolean {
+    if (!exists()) return false
+    val sha256 = hashSha256Path()
+    if (!sha256.exists()) return false
+    val computedSha = sha256asHex()
+    val expectedSha = sha256.readText()
+    return computedSha == expectedSha
+}
+
+private fun Path.saveIntegrity() {
+    val sha256 = hashSha256Path()
+    sha256.writeText(sha256asHex())
+}
+
+private fun Path.hashSha256Path(): Path {
+    return parent.resolve("$name.sha256")
+}
+
+private fun DependencyHandler.createDependency(module: Module): Dependency {
+    return create(module.group, module.name, module.version)
+}
+
+class RemapTask(
+    private val extension: SourceRemapperExtension,
+    private val project: Project,
+    private val configuration: Configuration,
+    private val namespace: String,
+    private val targetConfiguration: NamedDomainObjectProvider<Configuration>
+) {
+    private val artifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
+    private val sourceArtifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
+    private val remapped = HashSet<ModuleVersionIdentifier>()
+    private val names = HashMap<String, String>()
+    private val sourceNames = HashMap<String, String>()
+    private val sourceClassNames = HashMap<String, String>()
+
+    fun remap() {
+        collectArtifacts()
+        remapAll()
+        setupIvyRepository()
+    }
+
+    private fun remapAll() {
+        artifacts.keys.forEach { remap(it) }
+    }
+
+    private fun remap(id: ModuleVersionIdentifier) {
+        if (!remapped.add(id)) return
+
+        val artifact = artifacts[id]!!
+        artifact.dependencies.forEach {
+            remap(it.resolvedArtifact.moduleVersion.id)
         }
 
-        val sourceDependencies = ArrayList<Dependency>()
-        artifacts.forEach {
-            val dependency =
-                project.dependencies.create(it.key.group, it.key.name, it.key.version, classifier = "sources")
-            sourceDependencies.add(dependency)
+        val sourceArtifact = sourceArtifacts[id]
+
+        val module = artifact.remapped(namespace)
+        val directory = artifactDirectory(module)
+        val dependency = project.dependencies.createDependency(module)
+
+        targetConfiguration.configure { dependencies.add(dependency) }
+
+        writeIvyXml(
+            module,
+            artifact.dependencies.mapTo(ArrayList()) { it.remapped(namespace) },
+            directory.resolve("ivy-${module.version}.xml")
+        )
+
+        remap(artifact.path, directory.resolve("${module.name}-${module.version}.jar"))
+        if (sourceArtifact != null) {
+            remapSource(sourceArtifact.path, directory.resolve("${module.name}-${module.version}-sources.jar"))
         }
-        val sourceDownloadConfiguration =
-            project.configurations.detachedConfiguration(*sourceDependencies.toTypedArray())
-        sourceDownloadConfiguration.isTransitive = false
-        val sourceArtifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
-        sourceDownloadConfiguration.resolvedConfiguration.firstLevelModuleDependencies.forEach {
-            collect(sourceArtifacts, it)
-        }
+    }
 
-        artifacts.forEach { entry ->
-            val module = entry.value.remapped(namespace)
-            val group = module.group
-            val name = module.name
-            val version = module.version
-            val directory = repositoryPath.resolve(group.replace('.', '/')).resolve(name).resolve(version)
-            val dependency = project.dependencies.create("$group:$name:$version")
-            target.configure {
-                dependencies.add(dependency)
-            }
-
-            val file = entry.value.resolvedArtifact.file.toPath()
-
-            val ivyXml = directory.resolve("ivy-$version.xml")
-            val dependencies =
-                entry.value.dependencies.stream().map { it.remapped(namespace) }.collect(Collectors.toList())
-
-            writeIvyXml(module, dependencies, ivyXml)
-
-            val jarPath = directory.resolve("$name-$version.jar")
-
-            remap(file, namespace, jarPath)
-
-            val sourceJarPath = directory.resolve("$name-$version-sources.jar")
-
-            val sourceFile = sourceArtifacts[entry.key]?.resolvedArtifact?.file?.toPath()
-            if (sourceFile != null) {
-                remapSource(sourceFile, namespace, sourceJarPath)
-            }
-        }
-
-        project.repositories {
-            ivy {
-                url = repositoryPath.toUri()
-                patternLayout {
-                    artifact(IvyArtifactRepository.MAVEN_ARTIFACT_PATTERN)
-                    ivy(IvyArtifactRepository.MAVEN_IVY_PATTERN)
-                    setM2compatible(true)
-                }
-                content {
-                    artifacts.forEach {
-                        val module = it.value.remapped(namespace)
-                        includeVersion(module.group, module.name, module.version)
-                    }
-                }
-            }
-        }
+    private fun artifactDirectory(module: Module): Path {
+        val group = module.group
+        val name = module.name
+        val version = module.version
+        val directory = extension.repositoryPath.resolve(group.replace('.', '/')).resolve(name).resolve(version)
+        return directory
     }
 
     private fun writeIvyXml(module: Module, dependencies: List<Module>, destination: Path) {
@@ -110,10 +136,15 @@ class SourceRemapperExtension(private val project: Project) {
         destination.saveIntegrity()
     }
 
-    private fun remapSource(file: Path, namespace: String, destination: Path) {
+    private fun remapSource(file: Path, destination: Path) {
         if (destination.verifyIntegrity()) return
 
-        val names = collectNames(file, namespace)
+        collectNames(file, sourceNames)
+        sourceNames.forEach {
+            if (it.key.endsWith(".java")) {
+                sourceClassNames[it.key.dropLast(5).replace('/', '.')] = it.value.dropLast(5).replace('/', '.')
+            }
+        }
 
         ZipInputStream(file.inputStream()).use { input ->
             destination.parent.createDirectories()
@@ -122,13 +153,13 @@ class SourceRemapperExtension(private val project: Project) {
                     val entry = input.nextEntry ?: break
 
                     val name = entry.name
-                    val newName = names[name] ?: name
+                    val newName = sourceNames[name] ?: name
 
                     output.putNextEntry(ZipEntry(newName))
 
                     val data = input.readBytes()
 
-                    output.write(transformSource(names, data, entry, namespace))
+                    output.write(transformSource(data, entry))
 
                     output.closeEntry()
                     input.closeEntry()
@@ -139,10 +170,10 @@ class SourceRemapperExtension(private val project: Project) {
         destination.saveIntegrity()
     }
 
-    private fun remap(file: Path, namespace: String, destination: Path) {
+    private fun remap(file: Path, destination: Path) {
         if (destination.verifyIntegrity()) return
 
-        val names = collectNames(file, namespace)
+        collectNames(file, names)
 
         val remapper = RelocationRemapper(names)
 
@@ -170,8 +201,7 @@ class SourceRemapperExtension(private val project: Project) {
         destination.saveIntegrity()
     }
 
-    private fun collectNames(file: Path, namespace: String): Map<String, String> {
-        val names = HashMap<String, String>()
+    private fun collectNames(file: Path, names: MutableMap<String, String>) {
         ZipInputStream(file.inputStream()).use { input ->
             while (true) {
                 val entry = input.nextEntry ?: break
@@ -182,30 +212,13 @@ class SourceRemapperExtension(private val project: Project) {
                 val remap = !isMeta && (isClass || entry.isDirectory)
 
                 val newName = if (remap) "${namespace.replace('.', '/')}/$name" else name
-                if (!name.equals(newName)) names[name] = newName
+                if (!name.equals(newName)) {
+                    names[name] = newName
+                }
 
                 input.closeEntry()
             }
         }
-        return names
-    }
-
-    private fun Path.verifyIntegrity(): Boolean {
-        if (!exists()) return false
-        val sha256 = hashSha256Path()
-        if (!sha256.exists()) return false
-        val computedSha = sha256asHex()
-        val expectedSha = sha256.readText()
-        return computedSha == expectedSha
-    }
-
-    private fun Path.saveIntegrity() {
-        val sha256 = hashSha256Path()
-        sha256.writeText(sha256asHex())
-    }
-
-    private fun Path.hashSha256Path(): Path {
-        return parent.resolve("$name.sha256")
     }
 
     private fun transform(
@@ -225,39 +238,43 @@ class SourceRemapperExtension(private val project: Project) {
     }
 
     private fun transformSource(
-        names: Map<String, String>, bytes: ByteArray, entry: ZipEntry, namespace: String
+        bytes: ByteArray, entry: ZipEntry
     ): ByteArray {
         if (entry.isDirectory) {
             return bytes
         }
 
         if (entry.name.endsWith(".java")) {
-            return remapJava(names, bytes, namespace)
+            return remapJava(bytes, entry.name.dropLast(5).replace('/', '.'))
         }
 
         return bytes
     }
 
     private fun remapJava(
-        names: Map<String, String>, bytes: ByteArray, namespace: String
+        bytes: ByteArray, className: String
     ): ByteArray {
         var sourceText = bytes.decodeToString()
+        sourceText = replacePackageName(sourceText, className)
 
-        names.forEach { entry ->
-            var key = entry.key.replace('/', '.')
-            key = if (key.endsWith(".java")) key.dropLast(5) else key
-            var value = entry.value.replace('/', '.')
-            value = if (value.endsWith(".java")) value.dropLast(5) else value
+        sourceClassNames.forEach { entry ->
+            val key = entry.key
+            val value = entry.value
+
             val regex = "(?<!${Regex.escape("$namespace.")})" + Regex.escape(key)
-            val prev = sourceText
             sourceText = sourceText.replace(Regex(regex), Matcher.quoteReplacement(value))
-            val next = sourceText
-            if (prev != next) {
-                println("Changed by $regex")
-            }
         }
 
         return sourceText.encodeToByteArray()
+    }
+
+    private fun replacePackageName(sourceText: String, className: String): String {
+        val lastIdx = className.lastIndexOf('.')
+        if (lastIdx == -1) return sourceText
+        val packageName = className.substring(0, lastIdx)
+        val toReplace = "package $packageName"
+        val replaceWith = "package $namespace.$packageName"
+        return sourceText.replace(toReplace, replaceWith)
     }
 
     private fun remapClass(
@@ -273,17 +290,60 @@ class SourceRemapperExtension(private val project: Project) {
         return writer.toByteArray()
     }
 
+    private fun collectArtifacts() {
+        configuration.resolvedConfiguration.firstLevelModuleDependencies.forEach { collect(it, artifacts) }
+        createSourceConfiguration().resolvedConfiguration.firstLevelModuleDependencies.forEach {
+            collect(it, sourceArtifacts)
+        }
+    }
+
     private fun collect(
-        artifacts: MutableMap<ModuleVersionIdentifier, PreparedModule>, resolvedDependency: ResolvedDependency
+        resolvedDependency: ResolvedDependency, artifacts: MutableMap<ModuleVersionIdentifier, PreparedModule>
     ): PreparedModule? {
         val id = resolvedDependency.module.id
-        val module = artifacts[id]
-        if (module != null) return module
+        artifacts[id]?.let { return it }
         if (resolvedDependency.moduleArtifacts.isEmpty()) return null
-        val dependencies = resolvedDependency.children.mapNotNull { collect(artifacts, it) }
-        return artifacts.computeIfAbsent(resolvedDependency.module.id) {
-            println(resolvedDependency.moduleArtifacts)
-            PreparedModule(resolvedDependency.moduleArtifacts.single(), HashSet(dependencies))
+
+        val dependencies = HashSet(resolvedDependency.children.mapNotNull { collect(it, artifacts) })
+
+        if (artifacts.containsKey(id)) throw IllegalArgumentException("Circular dependencies")
+
+        val moduleArtifact = resolvedDependency.moduleArtifacts.single()
+
+        val module = PreparedModule(moduleArtifact, dependencies)
+        artifacts[id] = module
+        return module
+    }
+
+    private fun createSourceConfiguration(): Configuration {
+        val sourceDependencies = ArrayList<Dependency>()
+        artifacts.forEach {
+            val dependency =
+                project.dependencies.create(it.key.group, it.key.name, it.key.version, classifier = "sources")
+            sourceDependencies.add(dependency)
+        }
+        val sourceDownloadConfiguration =
+            project.configurations.detachedConfiguration(*sourceDependencies.toTypedArray())
+        sourceDownloadConfiguration.isTransitive = false
+        return sourceDownloadConfiguration
+    }
+
+    private fun setupIvyRepository() {
+        project.repositories {
+            ivy {
+                url = extension.repositoryPath.toUri()
+                patternLayout {
+                    artifact(IvyArtifactRepository.MAVEN_ARTIFACT_PATTERN)
+                    ivy(IvyArtifactRepository.MAVEN_IVY_PATTERN)
+                    setM2compatible(true)
+                }
+                content {
+                    artifacts.forEach {
+                        val module = it.value.remapped(namespace)
+                        includeVersion(module.group, module.name, module.version)
+                    }
+                }
+            }
         }
     }
 }
@@ -302,4 +362,7 @@ data class PreparedModule(val resolvedArtifact: ResolvedArtifact, val dependenci
         val version = id.version
         return Module("$namespace.$group", module, version)
     }
+
+    val path: Path
+        get() = resolvedArtifact.file.toPath()
 }
