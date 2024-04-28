@@ -35,16 +35,6 @@ class SourceRemapperExtension(private val project: Project) {
         RemapTask(this, project, configuration, namespace, target).remap()
     }
 
-    private fun remap(
-        artifacts: Map<ModuleVersionIdentifier, PreparedModule>,
-        sourceArtifacts: Map<ModuleVersionIdentifier, PreparedModule>,
-        identifier: ModuleVersionIdentifier,
-        namespace: String,
-        target: NamedDomainObjectProvider<Configuration>
-    ) {
-
-    }
-
 }
 
 private fun Path.verifyIntegrity(): Boolean {
