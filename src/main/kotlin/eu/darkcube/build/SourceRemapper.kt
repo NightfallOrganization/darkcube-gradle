@@ -35,6 +35,18 @@ class SourceRemapperExtension(private val project: Project) {
         RemapTask(this, project, configuration, namespace, target).remap()
     }
 
+    internal fun setupIvyRepository() {
+        project.repositories {
+            ivy {
+                url = repositoryPath.toUri()
+                patternLayout {
+                    artifact(IvyArtifactRepository.MAVEN_ARTIFACT_PATTERN)
+                    ivy(IvyArtifactRepository.MAVEN_IVY_PATTERN)
+                    setM2compatible(true)
+                }
+            }
+        }
+    }
 }
 
 private fun Path.verifyIntegrity(): Boolean {
@@ -76,7 +88,6 @@ class RemapTask(
     fun remap() {
         collectArtifacts()
         remapAll()
-        setupIvyRepository()
     }
 
     private fun remapAll() {
@@ -316,25 +327,6 @@ class RemapTask(
             project.configurations.detachedConfiguration(*sourceDependencies.toTypedArray())
         sourceDownloadConfiguration.isTransitive = false
         return sourceDownloadConfiguration
-    }
-
-    private fun setupIvyRepository() {
-        project.repositories {
-            ivy {
-                url = extension.repositoryPath.toUri()
-                patternLayout {
-                    artifact(IvyArtifactRepository.MAVEN_ARTIFACT_PATTERN)
-                    ivy(IvyArtifactRepository.MAVEN_IVY_PATTERN)
-                    setM2compatible(true)
-                }
-                content {
-                    artifacts.forEach {
-                        val module = it.value.remapped(namespace)
-                        includeVersion(module.group, module.name, module.version)
-                    }
-                }
-            }
-        }
     }
 }
 
