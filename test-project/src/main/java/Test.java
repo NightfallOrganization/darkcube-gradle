@@ -1,7 +1,6 @@
-import eu.darkcube.system.libs.com.google.gson.Gson;
-import eu.darkcube.system.libs.com.google.gson.GsonBuilder;
-import eu.darkcube.system.libs.net.kyori.adventure.platform.bukkit.BukkitAudiences;
-import eu.darkcube.system.libs.net.kyori.adventure.text.Component;
+import eu.darkcube.system.test.libs.com.google.gson.Gson;
+import eu.darkcube.system.test.libs.com.google.gson.GsonBuilder;
+import eu.darkcube.system.test.libs.net.kyori.adventure.text.Component;
 
 public class Test {
     public static void main(String[] args) {

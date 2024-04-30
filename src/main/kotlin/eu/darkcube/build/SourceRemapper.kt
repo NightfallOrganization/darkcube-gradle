@@ -1,19 +1,21 @@
 package eu.darkcube.build
 
+import groovy.util.Node
 import org.gradle.api.NamedDomainObjectProvider
 import org.gradle.api.Project
 import org.gradle.api.artifacts.*
 import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository
-import org.gradle.kotlin.dsl.DependencyHandlerScope
-import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.repositories
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.kotlin.dsl.*
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.commons.ClassRemapper
 import org.objectweb.asm.commons.Remapper
 import sun.security.util.Resources_es
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Matcher
 import java.util.stream.Collectors
 import java.util.zip.ZipEntry
@@ -22,6 +24,10 @@ import java.util.zip.ZipOutputStream
 import kotlin.io.path.*
 
 class SourceRemapperExtension(private val project: Project) {
+
+    init {
+        RemapTask.id.set(0)
+    }
 
     private val cachesPathRoot: Path =
         project.gradle.gradleUserHomeDir.toPath().resolve("caches").resolve("darkcube-source-remapper")
@@ -32,7 +38,9 @@ class SourceRemapperExtension(private val project: Project) {
      * Remaps all files in the configuration to the given namespace
      */
     fun remap(configuration: Configuration, namespace: String, target: NamedDomainObjectProvider<Configuration>) {
-        RemapTask(this, project, configuration, namespace, target).remap()
+        val task = RemapTask(this, project, configuration, namespace, target);
+        task.remap()
+        task.createPublications()
     }
 
     internal fun setupIvyRepository() {
@@ -85,9 +93,47 @@ class RemapTask(
     private val sourceNames = HashMap<String, String>()
     private val sourceClassNames = HashMap<String, String>()
 
+    companion object {
+        internal val id = AtomicInteger()
+    }
+
     fun remap() {
         collectArtifacts()
         remapAll()
+    }
+
+    fun createPublications() {
+        val publishing = project.extensions.findByType<PublishingExtension>() ?: return
+        artifacts.forEach { entry ->
+            val artifact = entry.value
+            val module = artifact.remapped(namespace)
+            val directory = artifactDirectory(module)
+            publishing.publications {
+                println(module)
+                create<MavenPublication>("remapped-${id.incrementAndGet()}") {
+                    this.groupId = module.group
+                    this.artifactId = module.name
+                    this.version = module.version
+                    this.artifact(directory.artifact(module))
+                    val sourcePath = directory.sourceArtifact(module)
+                    if (sourcePath.exists())
+                        this.artifact(sourcePath)
+
+
+                    artifact.dependencies.forEach {
+                        pom.withXml {
+                            val node = (asNode()["dependencies"] as Node?) ?: asNode().appendNode("xml")
+                            val dep = node.appendNode("dependency")
+                            val id = it.remapped(namespace)
+                            dep.appendNode("groupId", id.group)
+                            dep.appendNode("artifactId", id.name)
+                            dep.appendNode("version", id.version)
+                            dep.appendNode("scope", "compile")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun remapAll() {
@@ -116,10 +162,18 @@ class RemapTask(
             directory.resolve("ivy-${module.version}.xml")
         )
 
-        remap(artifact.path, directory.resolve("${module.name}-${module.version}.jar"))
+        remap(artifact.path, directory.artifact(module))
         if (sourceArtifact != null) {
-            remapSource(sourceArtifact.path, directory.resolve("${module.name}-${module.version}-sources.jar"))
+            remapSource(sourceArtifact.path, directory.sourceArtifact(module))
         }
+    }
+
+    private fun Path.artifact(module: Module): Path {
+        return this.resolve("${module.name}-${module.version}.jar")
+    }
+
+    private fun Path.sourceArtifact(module: Module): Path {
+        return this.resolve("${module.name}-${module.version}-sources.jar")
     }
 
     private fun artifactDirectory(module: Module): Path {
