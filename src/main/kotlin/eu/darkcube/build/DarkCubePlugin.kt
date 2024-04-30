@@ -7,10 +7,12 @@ import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.plugins.quality.Checkstyle
 import org.gradle.api.plugins.quality.CheckstyleExtension
 import org.gradle.api.plugins.quality.CheckstylePlugin
+import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.tasks.JavaExec
 import org.gradle.api.tasks.bundling.AbstractArchiveTask
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.javadoc.Javadoc
+import org.gradle.internal.impldep.org.eclipse.jgit.transport.CredentialItem.Password
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
 import org.gradle.jvm.toolchain.JvmVendorSpec
@@ -31,6 +33,14 @@ class DarkCubePlugin : Plugin<Project> {
         project.extensions.findByName("buildScan")?.withGroovyBuilder {
             setProperty("termsOfServiceUrl", "https://gradle.com/terms-of-service")
             setProperty("termsOfServiceAgree", "yes")
+        }
+        project.extensions.findByType<PublishingExtension>()?.run {
+            repositories {
+                maven("https://nexus.darkcube.eu/repository/darkcube/") {
+                    name = "DarkCube"
+                    credentials(PasswordCredentials::class)
+                }
+            }
         }
 
         project.repositories {
