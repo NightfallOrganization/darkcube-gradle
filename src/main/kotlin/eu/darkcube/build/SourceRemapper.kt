@@ -1,6 +1,8 @@
 package eu.darkcube.build
 
+import eu.darkcube.build.RemapTask.Companion.id
 import groovy.util.Node
+import groovy.util.NodeList
 import org.gradle.api.NamedDomainObjectProvider
 import org.gradle.api.Project
 import org.gradle.api.artifacts.*
@@ -8,19 +10,35 @@ import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
-import org.gradle.kotlin.dsl.*
+import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
+import org.gradle.kotlin.dsl.create
+import org.gradle.kotlin.dsl.findByType
+import org.gradle.kotlin.dsl.register
+import org.gradle.kotlin.dsl.repositories
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.commons.ClassRemapper
 import org.objectweb.asm.commons.Remapper
-import sun.security.util.Resources_es
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Matcher
-import java.util.stream.Collectors
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import kotlin.collections.ArrayList
+import kotlin.collections.HashMap
+import kotlin.collections.HashSet
+import kotlin.collections.List
+import kotlin.collections.Map
+import kotlin.collections.MutableMap
+import kotlin.collections.Set
+import kotlin.collections.forEach
+import kotlin.collections.map
+import kotlin.collections.mapNotNull
+import kotlin.collections.mapTo
+import kotlin.collections.set
+import kotlin.collections.single
+import kotlin.collections.toTypedArray
 import kotlin.io.path.*
 
 class SourceRemapperExtension(private val project: Project) {
@@ -40,7 +58,7 @@ class SourceRemapperExtension(private val project: Project) {
     fun remap(configuration: Configuration, namespace: String, target: NamedDomainObjectProvider<Configuration>) {
         val task = RemapTask(this, project, configuration, namespace, target);
         task.remap()
-        task.createPublications()
+        createPublications(project, namespace, task.artifacts, this)
     }
 
     internal fun setupIvyRepository() {
@@ -86,7 +104,7 @@ class RemapTask(
     private val namespace: String,
     private val targetConfiguration: NamedDomainObjectProvider<Configuration>
 ) {
-    private val artifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
+    internal val artifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
     private val sourceArtifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
     private val remapped = HashSet<ModuleVersionIdentifier>()
     private val names = HashMap<String, String>()
@@ -100,40 +118,6 @@ class RemapTask(
     fun remap() {
         collectArtifacts()
         remapAll()
-    }
-
-    fun createPublications() {
-        val publishing = project.extensions.findByType<PublishingExtension>() ?: return
-        artifacts.forEach { entry ->
-            val artifact = entry.value
-            val module = artifact.remapped(namespace)
-            val directory = artifactDirectory(module)
-            publishing.publications {
-                println(module)
-                create<MavenPublication>("remapped-${id.incrementAndGet()}") {
-                    this.groupId = module.group
-                    this.artifactId = module.name
-                    this.version = module.version
-                    this.artifact(directory.artifact(module))
-                    val sourcePath = directory.sourceArtifact(module)
-                    if (sourcePath.exists())
-                        this.artifact(sourcePath)
-
-
-                    artifact.dependencies.forEach {
-                        pom.withXml {
-                            val node = (asNode()["dependencies"] as Node?) ?: asNode().appendNode("xml")
-                            val dep = node.appendNode("dependency")
-                            val id = it.remapped(namespace)
-                            dep.appendNode("groupId", id.group)
-                            dep.appendNode("artifactId", id.name)
-                            dep.appendNode("version", id.version)
-                            dep.appendNode("scope", "compile")
-                        }
-                    }
-                }
-            }
-        }
     }
 
     private fun remapAll() {
@@ -168,20 +152,8 @@ class RemapTask(
         }
     }
 
-    private fun Path.artifact(module: Module): Path {
-        return this.resolve("${module.name}-${module.version}.jar")
-    }
-
-    private fun Path.sourceArtifact(module: Module): Path {
-        return this.resolve("${module.name}-${module.version}-sources.jar")
-    }
-
     private fun artifactDirectory(module: Module): Path {
-        val group = module.group
-        val name = module.name
-        val version = module.version
-        val directory = extension.repositoryPath.resolve(group.replace('.', '/')).resolve(name).resolve(version)
-        return directory
+        return artifactDirectory(extension, module)
     }
 
     private fun writeIvyXml(module: Module, dependencies: List<Module>, destination: Path) {
@@ -381,6 +353,73 @@ class RemapTask(
             project.configurations.detachedConfiguration(*sourceDependencies.toTypedArray())
         sourceDownloadConfiguration.isTransitive = false
         return sourceDownloadConfiguration
+    }
+}
+
+private fun Path.artifact(module: Module): Path {
+    return this.resolve("${module.name}-${module.version}.jar")
+}
+
+private fun Path.sourceArtifact(module: Module): Path {
+    return this.resolve("${module.name}-${module.version}-sources.jar")
+}
+
+private fun artifactDirectory(extension: SourceRemapperExtension, module: Module): Path {
+    val group = module.group
+    val name = module.name
+    val version = module.version
+    val directory = extension.repositoryPath.resolve(group.replace('.', '/')).resolve(name).resolve(version)
+    return directory
+}
+
+fun createPublications(
+    project: Project,
+    namespace: String,
+    artifacts: Map<ModuleVersionIdentifier, PreparedModule>,
+    extension: SourceRemapperExtension
+) {
+    val publishing = project.extensions.findByType<PublishingExtension>() ?: return
+    val version = project.version.toString()
+    artifacts.forEach { entry ->
+        val artifact = entry.value
+        val module = artifact.remapped(namespace)
+        val directory = artifactDirectory(extension, module)
+        val dependencies = artifact.dependencies.map { it.remapped(namespace) }
+        publishing.publications {
+            val publicationName = "${module.group}:${module.name}:${module.version}"
+            register<MavenPublication>(publicationName) {
+                this.groupId = module.group
+                this.artifactId = module.name
+                this.version = version
+                this.artifact(directory.artifact(module))
+                val sourcePath = directory.sourceArtifact(module)
+                if (sourcePath.exists()) {
+                    this.artifact(sourcePath) {
+                        this.classifier = "sources"
+                    }
+                }
+
+                pom.withXml {
+                    val element = this.asElement()
+                    val dependenciesElement = element.ownerDocument.createElement("dependencies")
+
+                    dependencies.forEach {
+                        val dependencyElement = element.ownerDocument.createElement("dependency")
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("groupId").apply { nodeValue = it.group })
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("artifactId").apply { nodeValue = it.name })
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("version").apply { nodeValue = version })
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("scope").apply { nodeValue = "compile" })
+                        dependenciesElement.appendChild(dependencyElement)
+                    }
+
+                    element.appendChild(dependenciesElement)
+                }
+            }
+        }
     }
 }
 
