@@ -1,50 +1,54 @@
 package eu.darkcube.build
 
-import eu.darkcube.build.RemapTask.Companion.id
-import groovy.util.Node
-import groovy.util.NodeList
 import org.gradle.api.NamedDomainObjectProvider
 import org.gradle.api.Project
 import org.gradle.api.artifacts.*
 import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.attributes.Bundling
+import org.gradle.api.attributes.Category
+import org.gradle.api.attributes.LibraryElements
+import org.gradle.api.attributes.Usage
+import org.gradle.api.attributes.java.TargetJvmVersion
+import org.gradle.api.component.AdhocComponentWithVariants
+import org.gradle.api.component.SoftwareComponent
+import org.gradle.api.component.SoftwareComponentFactory
+import org.gradle.api.internal.artifacts.dsl.LazyPublishArtifact
+import org.gradle.api.java.archives.Attributes
+import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.api.provider.Provider
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
-import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
-import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.findByType
-import org.gradle.kotlin.dsl.register
-import org.gradle.kotlin.dsl.repositories
+import org.gradle.api.tasks.SourceSet
+import org.gradle.api.tasks.TaskProvider
+import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.kotlin.dsl.*
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.commons.ClassRemapper
 import org.objectweb.asm.commons.Remapper
+import java.io.StringWriter
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Matcher
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import kotlin.collections.ArrayList
-import kotlin.collections.HashMap
-import kotlin.collections.HashSet
-import kotlin.collections.List
-import kotlin.collections.Map
-import kotlin.collections.MutableMap
-import kotlin.collections.Set
-import kotlin.collections.forEach
-import kotlin.collections.map
-import kotlin.collections.mapNotNull
-import kotlin.collections.mapTo
+import javax.inject.Inject
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
 import kotlin.collections.set
-import kotlin.collections.single
-import kotlin.collections.toTypedArray
 import kotlin.io.path.*
 
-class SourceRemapperExtension(private val project: Project) {
+open class SourceRemapperExtension @Inject constructor(
+    private val project: Project, private val componentFactory: SoftwareComponentFactory
+) {
 
     init {
-        RemapTask.id.set(0)
+        id.set(0)
     }
 
     private val cachesPathRoot: Path =
@@ -55,10 +59,69 @@ class SourceRemapperExtension(private val project: Project) {
     /**
      * Remaps all files in the configuration to the given namespace
      */
-    fun remap(configuration: Configuration, namespace: String, target: NamedDomainObjectProvider<Configuration>) {
+    fun remap(
+        configuration: Configuration, namespace: String, target: NamedDomainObjectProvider<Configuration>
+    ): RemapConfiguration {
         val task = RemapTask(this, project, configuration, namespace, target);
         task.remap()
         createPublications(project, namespace, task.artifacts, this)
+        val artifactMap = HashMap<ModuleVersionIdentifier, RemappedModule>()
+        task.artifacts.forEach {
+            collectArtifacts(task, artifactMap, it.key)
+        }
+        val artifacts = ArrayList<RemappedModule>(artifactMap.values)
+        return RemapConfiguration(namespace, project.version.toString(), artifacts, createComponent(task))
+    }
+
+    private fun createComponent(task: RemapTask): RemapComponent {
+        val component = componentFactory.adhoc("remap-${id.incrementAndGet()}")
+        project.components.add(component)
+        val mainSourceSet = project.extensions.getByType<JavaPluginExtension>().sourceSets["main"]
+        val apiConfigurationName = mainSourceSet.apiElementsConfigurationName
+        val apiConfiguration = project.configurations[apiConfigurationName]
+        val outgoing = project.configurations.create("remap-${id.get()}") {
+            withDependencies {
+                val deps = apiConfiguration.allDependencies.mapNotNull {
+                    if (it is ExternalModuleDependency) {
+                        return@mapNotNull project.dependencies.create(
+                            group = it.group,
+                            name = it.name,
+                            version = project.version.toString(),
+                            configuration = it.targetConfiguration
+                        )
+                    }
+                    null
+                }
+                addAll(deps)
+            }
+        }
+        outgoing.setVisible(false)
+        outgoing.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API))
+        outgoing.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+        outgoing.attributes.attribute(
+            LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR)
+        )
+        outgoing.attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+        component.addVariantsFromConfiguration(outgoing) {
+            mapToMavenScope("compile")
+        }
+        return RemapComponent(component, outgoing, project)
+    }
+
+    private fun collectArtifacts(
+        task: RemapTask, artifacts: MutableMap<ModuleVersionIdentifier, RemappedModule>, id: ModuleVersionIdentifier
+    ): RemappedModule {
+        artifacts[id]?.let { return it }
+        val artifact: PreparedModule = task.artifacts[id]!!
+        val dependencies = ArrayList(artifact.dependencies.map {
+            collectArtifacts(
+                task, artifacts, it.resolvedArtifact.moduleVersion.id
+            )
+        })
+        val remapped = artifact.remapped(task.namespace)
+        return RemappedModule(
+            id.group, id.name, id.version, remapped.group, remapped.name, remapped.version, dependencies
+        )
     }
 
     internal fun setupIvyRepository() {
@@ -73,7 +136,47 @@ class SourceRemapperExtension(private val project: Project) {
             }
         }
     }
+
+    companion object {
+        internal val id = AtomicInteger()
+    }
 }
+
+class RemapComponent internal constructor(
+    val component: AdhocComponentWithVariants, private val outgoing: Configuration, private val project: Project
+) {
+    fun configureJava(sourceSet: Provider<SourceSet>, jarTask: Any): RemapComponent {
+        outgoing.attributes {
+            attributeProvider(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, project.providers.provider {
+                val compileJava = project.tasks.named<JavaCompile>(sourceSet.get().compileJavaTaskName)
+                compileJava.get().javaCompiler.get().metadata.languageVersion.asInt()
+            })
+        }
+        outgoing.outgoing {
+            this.artifact(jarTask)
+            attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.JAR_TYPE)
+        }
+        return this
+    }
+}
+
+class RemapConfiguration internal constructor(
+    val namespace: String,
+    private val projectVersion: String,
+    val artifacts: List<RemappedModule>,
+    val component: RemapComponent
+)
+
+
+data class RemappedModule(
+    val group: String,
+    val artifact: String,
+    val version: String,
+    val remappedGroup: String,
+    val remappedArtifact: String,
+    val remappedVersion: String,
+    val dependencies: List<RemappedModule>
+)
 
 private fun Path.verifyIntegrity(): Boolean {
     if (!exists()) return false
@@ -97,23 +200,19 @@ private fun DependencyHandler.createDependency(module: Module): Dependency {
     return create(module.group, module.name, module.version)
 }
 
-class RemapTask(
-    private val extension: SourceRemapperExtension,
-    private val project: Project,
-    private val configuration: Configuration,
-    private val namespace: String,
-    private val targetConfiguration: NamedDomainObjectProvider<Configuration>
+internal class RemapTask(
+    internal val extension: SourceRemapperExtension,
+    internal val project: Project,
+    internal val configuration: Configuration,
+    internal val namespace: String,
+    internal val targetConfiguration: NamedDomainObjectProvider<Configuration>
 ) {
     internal val artifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
-    private val sourceArtifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
-    private val remapped = HashSet<ModuleVersionIdentifier>()
-    private val names = HashMap<String, String>()
-    private val sourceNames = HashMap<String, String>()
-    private val sourceClassNames = HashMap<String, String>()
-
-    companion object {
-        internal val id = AtomicInteger()
-    }
+    internal val sourceArtifacts = HashMap<ModuleVersionIdentifier, PreparedModule>()
+    internal val remapped = HashSet<ModuleVersionIdentifier>()
+    internal val names = HashMap<String, String>()
+    internal val sourceNames = HashMap<String, String>()
+    internal val sourceClassNames = HashMap<String, String>()
 
     fun remap() {
         collectArtifacts()
@@ -372,25 +471,31 @@ private fun artifactDirectory(extension: SourceRemapperExtension, module: Module
     return directory
 }
 
-fun createPublications(
+internal fun createPublications(
     project: Project,
     namespace: String,
     artifacts: Map<ModuleVersionIdentifier, PreparedModule>,
     extension: SourceRemapperExtension
 ) {
     val publishing = project.extensions.findByType<PublishingExtension>() ?: return
-    val version = project.version.toString()
+    val projectVersion = project.version.toString()
+    val projectGroup = project.group
+    val projectName = project.name
     artifacts.forEach { entry ->
         val artifact = entry.value
+        val artifactGroup = artifact.resolvedArtifact.moduleVersion.id.group
         val module = artifact.remapped(namespace)
         val directory = artifactDirectory(extension, module)
-        val dependencies = artifact.dependencies.map { it.remapped(namespace) }
+        val dependencies = artifact.dependencies.map {
+            val itGroup = it.resolvedArtifact.moduleVersion.id.group
+            it.remapped(namespace).copy(group = itGroup)
+        }
         publishing.publications {
-            val publicationName = "${module.group}:${module.name}:${module.version}"
+            val publicationName = "${module.group}-${module.name}-${module.version}"
             register<MavenPublication>(publicationName) {
-                this.groupId = module.group
+                this.groupId = "${projectGroup}.${projectName}.${artifactGroup}"
                 this.artifactId = module.name
-                this.version = version
+                this.version = projectVersion
                 this.artifact(directory.artifact(module))
                 val sourcePath = directory.sourceArtifact(module)
                 if (sourcePath.exists()) {
@@ -405,14 +510,14 @@ fun createPublications(
 
                     dependencies.forEach {
                         val dependencyElement = element.ownerDocument.createElement("dependency")
-                        dependencyElement.appendChild(
-                            element.ownerDocument.createElement("groupId").apply { nodeValue = it.group })
-                        dependencyElement.appendChild(
-                            element.ownerDocument.createElement("artifactId").apply { nodeValue = it.name })
-                        dependencyElement.appendChild(
-                            element.ownerDocument.createElement("version").apply { nodeValue = version })
-                        dependencyElement.appendChild(
-                            element.ownerDocument.createElement("scope").apply { nodeValue = "compile" })
+                        dependencyElement.appendChild(element.ownerDocument.createElement("groupId")
+                            .apply { textContent = "${projectGroup}.${projectName}.${it.group}" })
+                        dependencyElement.appendChild(element.ownerDocument.createElement("artifactId")
+                            .apply { textContent = it.name })
+                        dependencyElement.appendChild(element.ownerDocument.createElement("version")
+                            .apply { textContent = projectVersion })
+                        dependencyElement.appendChild(element.ownerDocument.createElement("scope")
+                            .apply { textContent = "compile" })
                         dependenciesElement.appendChild(dependencyElement)
                     }
 
@@ -423,13 +528,13 @@ fun createPublications(
     }
 }
 
-class RelocationRemapper(private val names: Map<String, String>) : Remapper() {
+internal class RelocationRemapper(private val names: Map<String, String>) : Remapper() {
     override fun map(internalName: String): String {
         return names["$internalName.class"]?.dropLast(".class".length) ?: internalName
     }
 }
 
-data class PreparedModule(val resolvedArtifact: ResolvedArtifact, val dependencies: Set<PreparedModule>) {
+internal data class PreparedModule(val resolvedArtifact: ResolvedArtifact, val dependencies: Set<PreparedModule>) {
     fun remapped(namespace: String): Module {
         val id = resolvedArtifact.moduleVersion.id
         val group = id.group

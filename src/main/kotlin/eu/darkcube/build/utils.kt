@@ -9,7 +9,7 @@ import javax.xml.XMLConstants
 import javax.xml.stream.XMLOutputFactory
 import kotlin.io.path.inputStream
 
-val darkcubeHash: String by lazy { hashDarkCubeJar() }
+internal val darkcubeHash: String by lazy { hashDarkCubeJar() }
 
 private fun hashDarkCubeJar(): String {
     return Paths.get(DarkCubePlugin::class.java.protectionDomain.codeSource.location.toURI()).sha256asHex()
@@ -19,7 +19,7 @@ private val OUTPUT_FACTORY = XMLOutputFactory.newInstance()
 private const val XSI = XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI
 private const val IVY = "http://ant.apache.org/ivy/schemas/ivy.xsd"
 
-fun writeIvyModule(
+internal fun writeIvyModule(
     module: Module,
     dependencies: List<Module>
 ): String = ByteArrayOutputStream().use { outputStream ->
@@ -52,9 +52,9 @@ fun writeIvyModule(
     String(outputStream.toByteArray(), Charsets.UTF_8)
 }
 
-fun Path.sha256asHex(): String = inputStream().use { input -> input.sha256() }.asHexString()
+internal fun Path.sha256asHex(): String = inputStream().use { input -> input.sha256() }.asHexString()
 
-fun InputStream.sha256(): ByteArray {
+internal fun InputStream.sha256(): ByteArray {
     val digest = MessageDigest.getInstance("SHA-256")
     val buffer = ByteArray(8192)
     while (true) {
@@ -69,7 +69,7 @@ fun InputStream.sha256(): ByteArray {
 
 private val hexChars = "0123456789abcdef".toCharArray()
 
-fun ByteArray.asHexString(): String {
+internal fun ByteArray.asHexString(): String {
     val chars = CharArray(2 * size)
     forEachIndexed { i, byte ->
         val unsigned = byte.toInt() and 0xFF
@@ -79,7 +79,7 @@ fun ByteArray.asHexString(): String {
     return String(chars)
 }
 
-data class Module(
+internal data class Module(
     val group: String,
     val name: String,
     val version: String,
