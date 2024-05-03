@@ -94,17 +94,28 @@ open class SourceRemapperExtension @Inject constructor(
             it
         }
 //        addAll(deps)
-        val outgoing = project.configurations.detachedConfiguration(*deps.toTypedArray())
-        outgoing.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API))
-        outgoing.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
-        outgoing.attributes.attribute(
+        val compileConfiguration = project.configurations.detachedConfiguration(*deps.toTypedArray())
+        compileConfiguration.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API))
+        compileConfiguration.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+        compileConfiguration.attributes.attribute(
             LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR)
         )
-        outgoing.attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
-        component.addVariantsFromConfiguration(outgoing) {
+        compileConfiguration.attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+        component.addVariantsFromConfiguration(compileConfiguration) {
             mapToMavenScope("compile")
         }
-        return RemapComponent(component, outgoing, project)
+
+        val runtimeConfiguration = project.configurations.detachedConfiguration(*deps.toTypedArray())
+        runtimeConfiguration.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
+        runtimeConfiguration.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+        runtimeConfiguration.attributes.attribute(
+            LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR)
+        )
+        runtimeConfiguration.attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+        component.addVariantsFromConfiguration(runtimeConfiguration) {
+            mapToMavenScope("runtime")
+        }
+        return RemapComponent(component, compileConfiguration, project)
     }
 
     private fun collectArtifacts(
@@ -542,12 +553,12 @@ internal fun createPublications(
                         val dependencyElement = element.ownerDocument.createElement("dependency")
                         dependencyElement.appendChild(element.ownerDocument.createElement("groupId")
                             .apply { textContent = publishedGroup(projectGroup, projectName, it.group) })
-                        dependencyElement.appendChild(element.ownerDocument.createElement("artifactId")
-                            .apply { textContent = it.name })
-                        dependencyElement.appendChild(element.ownerDocument.createElement("version")
-                            .apply { textContent = projectVersion })
-                        dependencyElement.appendChild(element.ownerDocument.createElement("scope")
-                            .apply { textContent = "compile" })
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("artifactId").apply { textContent = it.name })
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("version").apply { textContent = projectVersion })
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("scope").apply { textContent = "compile" })
                         dependenciesElement.appendChild(dependencyElement)
                     }
 
