@@ -269,7 +269,13 @@ internal class RemapTask(
 
     private fun remapAll() {
         val hasWork = collectAllNames()
+        if (hasWork) {
+            project.logger.lifecycle("SourceRemapper found work. Starting to remap.")
+        }
         artifacts.keys.forEach { remap(hasWork, it) }
+        if (hasWork) {
+            project.logger.lifecycle("Remap complete.")
+        }
     }
 
     private fun remap(hasWork: Boolean, id: ModuleVersionIdentifier) {
