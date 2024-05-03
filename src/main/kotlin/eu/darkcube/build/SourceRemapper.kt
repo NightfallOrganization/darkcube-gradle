@@ -257,12 +257,12 @@ internal class RemapTask(
     }
 
     private fun remapAll() {
-        if (!collectAllNames()) return
-        artifacts.keys.forEach { remap(it) }
+        val hasWork = collectAllNames()
+        artifacts.keys.forEach { remap(hasWork, it) }
     }
 
-    private fun remap(id: ModuleVersionIdentifier) {
-        if (!remapped.add(id)) return
+    private fun remap(hasWork: Boolean, id: ModuleVersionIdentifier) {
+        if (!remapped.add(id)) throw IllegalStateException()
 
         val artifact = artifacts[id]!!
         val sourceArtifact = sourceArtifacts[id]
@@ -278,9 +278,11 @@ internal class RemapTask(
             directory.resolve("ivy-${module.version}.xml")
         )
 
-        remap(artifact.path, directory.artifact(module))
-        if (sourceArtifact != null) {
-            remapSource(sourceArtifact.path, directory.sourceArtifact(module))
+        if (hasWork) {
+            remap(artifact.path, directory.artifact(module))
+            if (sourceArtifact != null) {
+                remapSource(sourceArtifact.path, directory.sourceArtifact(module))
+            }
         }
     }
 
