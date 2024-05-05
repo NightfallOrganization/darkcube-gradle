@@ -24,11 +24,16 @@ class DarkCubePlugin : Plugin<Project> {
         project.plugins.apply(CheckstylePlugin::class)
         project.extensions.getByType<CheckstyleExtension>().run {
             val cl = this@DarkCubePlugin.javaClass.classLoader
-            config = cl.getResource("assets/darkcube/checkstyle.xml")!!.run {
-                project.resources.text.fromUri(this)
-            }
+            val url = cl.getResource("assets/darkcube/checkstyle.xml")!!
+            val resource = project.resources.text.fromUri(url)
+            config = resource
 
             toolVersion = cl.getResourceAsStream("assets/darkcube/checkstyle.version")!!.readBytes().decodeToString()
+
+            val checkstyleConfig = url.readText()
+            project.tasks.register<GenerateCheckstyle>("generateCheckstyle", checkstyleConfig).configure {
+                this.group = "darkcube"
+            }
         }
         project.extensions.findByName("buildScan")?.withGroovyBuilder {
             setProperty("termsOfServiceUrl", "https://gradle.com/terms-of-service")
