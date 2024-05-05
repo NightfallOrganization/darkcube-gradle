@@ -18,7 +18,6 @@ configurations.api.configure { extendsFrom(embed.get()) }
 
 dependencies {
     implementation("org.gradle.toolchains:foojay-resolver:0.8.0")
-//    embed("fr.inria.gforge.spoon:spoon-core:11.0.0")
     embed("org.ow2.asm:asm-commons:9.7")
 }
 
