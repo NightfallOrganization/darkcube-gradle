@@ -7,7 +7,7 @@ import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import javax.inject.Inject
 
-class GenerateCheckstyle @Inject constructor(
+abstract class GenerateCheckstyle @Inject constructor(
     objects: ObjectFactory, @Input val checkstyleConfig: String
 ) : DefaultTask() {
     @OutputFile

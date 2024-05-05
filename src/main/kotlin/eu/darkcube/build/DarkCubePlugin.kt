@@ -30,9 +30,11 @@ class DarkCubePlugin : Plugin<Project> {
 
             toolVersion = cl.getResourceAsStream("assets/darkcube/checkstyle.version")!!.readBytes().decodeToString()
 
-            val checkstyleConfig = url.readText()
-            project.tasks.register<GenerateCheckstyle>("generateCheckstyle", checkstyleConfig).configure {
-                this.group = "darkcube"
+            if (project.rootProject == project) {
+                val checkstyleConfig = url.readText()
+                project.tasks.register<GenerateCheckstyle>("generateCheckstyle", checkstyleConfig).configure {
+                    this.group = "darkcube"
+                }
             }
         }
         project.extensions.findByName("buildScan")?.withGroovyBuilder {
