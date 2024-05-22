@@ -4,6 +4,7 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.repositories.PasswordCredentials
 import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.api.plugins.catalog.VersionCatalogPlugin
 import org.gradle.api.plugins.quality.Checkstyle
 import org.gradle.api.plugins.quality.CheckstyleExtension
 import org.gradle.api.plugins.quality.CheckstylePlugin
@@ -22,6 +23,7 @@ import java.nio.charset.StandardCharsets
 class DarkCubePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.plugins.apply(CheckstylePlugin::class)
+        project.plugins.apply(VersionCatalogPlugin::class)
         project.extensions.getByType<CheckstyleExtension>().run {
             val cl = this@DarkCubePlugin.javaClass.classLoader
             val url = cl.getResource("assets/darkcube/checkstyle.xml")!!
