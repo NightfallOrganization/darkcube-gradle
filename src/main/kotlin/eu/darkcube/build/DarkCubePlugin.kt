@@ -67,6 +67,8 @@ class DarkCubePlugin : Plugin<Project> {
                 languageVersion = JavaLanguageVersion.of(21)
                 vendor = JvmVendorSpec.ADOPTIUM
             }
+            javaPluginExtension.withSourcesJar()
+            javaPluginExtension.withJavadocJar()
 
             project.tasks.withType<Checkstyle>().configureEach {
                 javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
