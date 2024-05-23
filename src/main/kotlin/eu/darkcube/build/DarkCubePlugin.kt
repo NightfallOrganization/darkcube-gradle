@@ -67,8 +67,6 @@ class DarkCubePlugin : Plugin<Project> {
                 languageVersion = JavaLanguageVersion.of(21)
                 vendor = JvmVendorSpec.ADOPTIUM
             }
-            javaPluginExtension.withSourcesJar()
-            javaPluginExtension.withJavadocJar()
 
             project.tasks.withType<Checkstyle>().configureEach {
                 javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
@@ -76,6 +74,12 @@ class DarkCubePlugin : Plugin<Project> {
             project.tasks.withType<JavaExec>().configureEach {
                 javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
             }
+        }
+        project.pluginManager.withPlugin("java") {
+            val javaPluginExtension = project.extensions.getByType<JavaPluginExtension>()
+
+            javaPluginExtension.withSourcesJar()
+            javaPluginExtension.withJavadocJar()
         }
 
         project.tasks.withType<JavaCompile>().configureEach {
