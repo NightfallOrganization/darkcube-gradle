@@ -90,7 +90,9 @@ class DarkCubePlugin : Plugin<Project> {
         }
         project.tasks.withType<Javadoc>().configureEach {
             options.encoding = StandardCharsets.UTF_8.name()
+            options.quiet()
             isFailOnError = false
+            isVerbose = false
         }
         project.tasks.withType<AbstractArchiveTask>().configureEach {
             archiveVersion.convention("")
