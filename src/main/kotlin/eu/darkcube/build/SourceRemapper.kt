@@ -12,6 +12,7 @@ import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.attributes.Usage
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.api.component.AdhocComponentWithVariants
+import org.gradle.api.component.SoftwareComponent
 import org.gradle.api.component.SoftwareComponentFactory
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.provider.Provider
@@ -62,7 +63,65 @@ open class SourceRemapperExtension @Inject constructor(
             collectArtifacts(task, artifactMap, it.key)
         }
         val artifacts = ArrayList<RemappedModule>(artifactMap.values)
-        return RemapConfiguration(namespace, project.version.toString(), artifacts, createComponent(task))
+        return RemapConfiguration(namespace, project.version.toString(), artifacts, task)
+    }
+
+    fun createComponent(
+        sourceConfiguration: NamedDomainObjectProvider<Configuration>,
+        vararg remapConfigurations: RemapConfiguration
+    ): AdhocComponentWithVariants {
+        val component = componentFactory.adhoc("remap-${id.incrementAndGet()}")
+        val artifacts = remapConfigurations.flatMap { it.artifacts }
+        project.components.add(component)
+        val projectGroup = project.group.toString()
+        val projectName = project.name
+        val dependencies = sourceConfiguration.get().allDependencies.mapNotNull {
+            if (it is ExternalModuleDependency) {
+                val foundModule = artifacts.singleOrNull { m ->
+                    m.remappedGroup == it.group && m.remappedArtifact == it.name && m.remappedVersion == it.version
+                }
+                if (foundModule != null) {
+                    return@mapNotNull project.dependencies.create(
+                        group = publishedGroup(projectGroup, projectName, foundModule.group),
+                        name = it.name,
+                        version = project.version.toString(),
+                        configuration = it.targetConfiguration
+                    )
+                } else {
+                    println("Unable to find module for $it")
+                }
+            } else {
+                println("Unknown dependency type in remap: $it")
+            }
+            it
+        }
+
+        val compileConfiguration = project.configurations.create("remapApiElements")
+        compileConfiguration.dependencies.addAll(dependencies)
+        compileConfiguration.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API))
+        compileConfiguration.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+        compileConfiguration.attributes.attribute(
+            LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR)
+        )
+        compileConfiguration.attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+        component.addVariantsFromConfiguration(compileConfiguration) {
+            mapToMavenScope("compile")
+        }
+
+        val runtimeConfiguration = project.configurations.create("remapRuntimeElements")
+        runtimeConfiguration.dependencies.addAll(dependencies)
+        runtimeConfiguration.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
+        runtimeConfiguration.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+        runtimeConfiguration.attributes.attribute(
+            LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR)
+        )
+        runtimeConfiguration.attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+        component.addVariantsFromConfiguration(runtimeConfiguration) {
+            mapToMavenScope("runtime")
+        }
+
+
+        return component
     }
 
     private fun createComponent(task: RemapTask): RemapComponent {
@@ -75,9 +134,6 @@ open class SourceRemapperExtension @Inject constructor(
         val projectGroup = project.group.toString()
         val projectName = project.name
         val namespace = task.namespace
-//        val outgoing = project.configurations.create("remap-configuration-${id.get()}") {
-//            isVisible = false
-//        }
         val deps = apiConfiguration.allDependencies.mapNotNull {
             if (it is ExternalModuleDependency) {
                 val foundModule =
@@ -93,7 +149,6 @@ open class SourceRemapperExtension @Inject constructor(
             }
             it
         }
-//        addAll(deps)
         val compileConfiguration = project.configurations.detachedConfiguration(*deps.toTypedArray())
         compileConfiguration.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API))
         compileConfiguration.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
@@ -178,7 +233,7 @@ class RemapConfiguration internal constructor(
     val namespace: String,
     private val projectVersion: String,
     val artifacts: List<RemappedModule>,
-    val component: RemapComponent
+    internal val task: RemapTask
 )
 
 
