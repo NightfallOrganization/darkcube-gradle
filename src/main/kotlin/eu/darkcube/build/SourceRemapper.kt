@@ -97,6 +97,7 @@ open class SourceRemapperExtension @Inject constructor(
         }
 
         val compileConfiguration = project.configurations.create("remapApiElements")
+        compileConfiguration.isVisible = false
         compileConfiguration.dependencies.addAll(dependencies)
         compileConfiguration.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API))
         compileConfiguration.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
@@ -109,6 +110,7 @@ open class SourceRemapperExtension @Inject constructor(
         }
 
         val runtimeConfiguration = project.configurations.create("remapRuntimeElements")
+        runtimeConfiguration.isVisible = false
         runtimeConfiguration.dependencies.addAll(dependencies)
         runtimeConfiguration.attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
         runtimeConfiguration.attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
