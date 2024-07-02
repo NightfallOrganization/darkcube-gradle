@@ -13,7 +13,6 @@ import org.gradle.api.tasks.JavaExec
 import org.gradle.api.tasks.bundling.AbstractArchiveTask
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.javadoc.Javadoc
-import org.gradle.internal.impldep.org.eclipse.jgit.transport.CredentialItem.Password
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
 import org.gradle.jvm.toolchain.JvmVendorSpec
@@ -75,11 +74,13 @@ class DarkCubePlugin : Plugin<Project> {
                 javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
             }
         }
-        project.pluginManager.withPlugin("java") {
-            val javaPluginExtension = project.extensions.getByType<JavaPluginExtension>()
+        project.pluginManager.withPlugin("java-library") {
+            project.pluginManager.withPlugin("maven-publish") {
+                val javaPluginExtension = project.extensions.getByType<JavaPluginExtension>()
 
-            javaPluginExtension.withSourcesJar()
-            javaPluginExtension.withJavadocJar()
+                javaPluginExtension.withSourcesJar()
+                javaPluginExtension.withJavadocJar()
+            }
         }
 
         project.tasks.withType<JavaCompile>().configureEach {
