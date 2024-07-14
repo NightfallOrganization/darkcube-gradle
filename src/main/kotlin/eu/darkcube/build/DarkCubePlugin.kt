@@ -63,7 +63,7 @@ class DarkCubePlugin : Plugin<Project> {
             val toolchainService = project.extensions.getByType<JavaToolchainService>()
 
             javaPluginExtension.toolchain {
-                languageVersion = JavaLanguageVersion.of(21)
+                languageVersion = JavaLanguageVersion.of(22)
                 vendor = JvmVendorSpec.ADOPTIUM
             }
 
