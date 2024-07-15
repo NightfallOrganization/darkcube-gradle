@@ -86,7 +86,7 @@ class DarkCubePlugin : Plugin<Project> {
         project.tasks.withType<JavaCompile>().configureEach {
             options.encoding = StandardCharsets.UTF_8.name()
             options.compilerArgs.add("--enable-preview")
-            options.compilerArgs.add("-Xlint:preview")
+            options.compilerArgs.add("-Xlint:-preview")
             options.isIncremental = true
             options.isDeprecation = false
             options.isWarnings = false
