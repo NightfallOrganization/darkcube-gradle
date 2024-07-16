@@ -13,6 +13,8 @@ import org.gradle.api.tasks.JavaExec
 import org.gradle.api.tasks.bundling.AbstractArchiveTask
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.javadoc.Javadoc
+import org.gradle.api.tasks.testing.Test
+import org.gradle.external.javadoc.CoreJavadocOptions
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
 import org.gradle.jvm.toolchain.JvmVendorSpec
@@ -72,6 +74,11 @@ class DarkCubePlugin : Plugin<Project> {
             }
             project.tasks.withType<JavaExec>().configureEach {
                 javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
+                jvmArgs("--enable-preview")
+            }
+            project.tasks.withType<Test>().configureEach {
+                javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
+                jvmArgs("--enable-preview")
             }
         }
         project.pluginManager.withPlugin("java-library") {
@@ -92,8 +99,13 @@ class DarkCubePlugin : Plugin<Project> {
             options.isWarnings = false
         }
         project.tasks.withType<Javadoc>().configureEach {
-            options.encoding = StandardCharsets.UTF_8.name()
-            options.quiet()
+            options {
+                this as CoreJavadocOptions
+                encoding = StandardCharsets.UTF_8.name()
+                addBooleanOption("-enable-preview", true)
+                source = "22"
+                quiet()
+            }
             isFailOnError = false
             isVerbose = false
         }
