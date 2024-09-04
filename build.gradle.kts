@@ -18,6 +18,9 @@ configurations.api.configure { extendsFrom(embed.get()) }
 
 dependencies {
     implementation("org.gradle.toolchains:foojay-resolver:0.8.0")
+    embed("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    embed("net.java.dev.jna:jna:5.14.0")
+    embed("net.java.dev.jna:jna-platform:5.14.0")
     embed("com.github.mwiede:jsch:0.2.19")
     embed("org.ow2.asm:asm-commons:9.7")
 }
