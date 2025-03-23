@@ -3,7 +3,7 @@ shadow = "8.1.7"
 foojay-resolver = "0.9.0"
 bouncycastle = "1.78.1"
 jna = "5.14.0"
-jsch = "0.2.19"
+jsch = "0.2.24"
 asm = "9.7"
 
 [libraries]
