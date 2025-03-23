@@ -1,0 +1,18 @@
+[versions]
+shadow = "8.1.7"
+foojay-resolver = "0.9.0"
+bouncycastle = "1.78.1"
+jna = "5.14.0"
+jsch = "0.2.19"
+asm = "9.7"
+
+[libraries]
+foojay-resolver = { group = "org.gradle.toolchains", name = "foojay-resolver", version.ref = "foojay-resolver" }
+bcprov-jdk18on = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
+jna-platform = { group = "net.java.dev.jna", name = "jna-platform", version.ref = "jna" }
+jsch = { group = "com.github.mwiede", name = "jsch", version.ref = "jsch" }
+asm-commons = { group = "org.ow2.asm", name = "asm-commons", version.ref = "asm" }
+
+[plugins]
+shadow = { id = "io.github.goooler.shadow", version.ref = "shadow" }

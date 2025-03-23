@@ -3,7 +3,7 @@ plugins {
     `maven-publish`
     `java-gradle-plugin`
     checkstyle
-    id("io.github.goooler.shadow") version "8.1.7"
+    alias(libs.plugins.shadow)
 }
 
 group = "eu.darkcube.build"
@@ -17,12 +17,12 @@ val embed = configurations.register("embed")
 configurations.api.configure { extendsFrom(embed.get()) }
 
 dependencies {
-    implementation("org.gradle.toolchains:foojay-resolver:0.8.0")
-    embed("org.bouncycastle:bcprov-jdk18on:1.78.1")
-    embed("net.java.dev.jna:jna:5.14.0")
-    embed("net.java.dev.jna:jna-platform:5.14.0")
-    embed("com.github.mwiede:jsch:0.2.19")
-    embed("org.ow2.asm:asm-commons:9.7")
+    implementation(libs.foojay.resolver)
+    embed(libs.bcprov.jdk18on)
+    embed(libs.jna)
+    embed(libs.jna.platform)
+    embed(libs.jsch)
+    embed(libs.asm.commons)
 }
 
 tasks {
