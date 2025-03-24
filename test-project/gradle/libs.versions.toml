@@ -4,7 +4,7 @@ adventure-platform = "4.3.4"
 
 gson = "2.11.0"
 brigadier = "1.0.18"
-annotations = "24.1.0"
+annotations = "26.0.2"
 caffeine = "3.2.0"
 
 [libraries]
