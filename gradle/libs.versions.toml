@@ -2,7 +2,7 @@
 shadow = "8.1.8"
 foojay-resolver = "0.9.0"
 bouncycastle = "1.80"
-jna = "5.14.0"
+jna = "5.17.0"
 jsch = "0.2.24"
 asm = "9.7.1"
 
