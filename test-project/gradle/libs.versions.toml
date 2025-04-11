@@ -1,5 +1,5 @@
 [versions]
-adventure = "4.19.0"
+adventure = "4.20.0"
 adventure-platform = "4.3.4"
 
 gson = "2.12.1"
