@@ -1,5 +1,5 @@
 [versions]
-shadow = "8.1.8"
+shadow = "8.3.5"
 foojay-resolver = "0.10.0"
 bouncycastle = "1.80"
 jna = "5.17.0"
@@ -15,4 +15,4 @@ jsch = { group = "com.github.mwiede", name = "jsch", version.ref = "jsch" }
 asm-commons = { group = "org.ow2.asm", name = "asm-commons", version.ref = "asm" }
 
 [plugins]
-shadow = { id = "io.github.goooler.shadow", version.ref = "shadow" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
