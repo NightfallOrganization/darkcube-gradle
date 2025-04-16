@@ -65,7 +65,7 @@ class DarkCubePlugin : Plugin<Project> {
             val toolchainService = project.extensions.getByType<JavaToolchainService>()
 
             javaPluginExtension.toolchain {
-                languageVersion = JavaLanguageVersion.of(24)
+                languageVersion = JavaLanguageVersion.of(23)
                 vendor = JvmVendorSpec.ADOPTIUM
             }
 
@@ -103,7 +103,7 @@ class DarkCubePlugin : Plugin<Project> {
                 this as CoreJavadocOptions
                 encoding = StandardCharsets.UTF_8.name()
                 addBooleanOption("-enable-preview", true)
-                source = "24"
+                source = "23"
                 quiet()
             }
             isFailOnError = false
