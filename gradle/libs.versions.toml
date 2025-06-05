@@ -1,7 +1,7 @@
 [versions]
 shadow = "8.3.6"
 foojay-resolver = "0.10.0"
-bouncycastle = "1.80"
+bouncycastle = "1.81"
 jna = "5.17.0"
 jsch = "0.2.25"
 asm = "9.8"
