@@ -5,7 +5,7 @@ adventure-platform = "4.4.0"
 gson = "2.13.1"
 brigadier = "1.0.18"
 annotations = "26.0.2"
-caffeine = "3.2.0"
+caffeine = "3.2.1"
 
 [libraries]
 adventure-api = { group = "net.kyori", name = "adventure-api", version.ref = "adventure" }
