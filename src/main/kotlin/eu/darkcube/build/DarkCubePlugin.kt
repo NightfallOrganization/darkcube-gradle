@@ -70,14 +70,14 @@ class DarkCubePlugin : Plugin<Project> {
             }
 
             project.tasks.withType<Checkstyle>().configureEach {
-                javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
+                javaLauncher = toolchainService.launcherFor(javaPluginExtension.toolchain)
             }
             project.tasks.withType<JavaExec>().configureEach {
-                javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
+                javaLauncher = toolchainService.launcherFor(javaPluginExtension.toolchain)
                 jvmArgs("--enable-preview")
             }
             project.tasks.withType<Test>().configureEach {
-                javaLauncher = toolchainService.launcherFor { javaPluginExtension.toolchain }
+                javaLauncher = toolchainService.launcherFor(javaPluginExtension.toolchain)
                 jvmArgs("--enable-preview")
             }
         }
