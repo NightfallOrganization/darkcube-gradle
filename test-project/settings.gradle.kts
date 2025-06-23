@@ -10,5 +10,5 @@ pluginManagement {
 }
 
 plugins {
-    id("eu.darkcube.darkcube.settings") version "1.6.2"
+    id("eu.darkcube.darkcube.settings") version "1.7.0"
 }
