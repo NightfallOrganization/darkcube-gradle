@@ -107,7 +107,6 @@ class DarkCubePlugin : Plugin<Project> {
                 quiet()
             }
             isFailOnError = false
-            isVerbose = false
         }
         project.tasks.withType<AbstractArchiveTask>().configureEach {
             archiveVersion.convention("")
