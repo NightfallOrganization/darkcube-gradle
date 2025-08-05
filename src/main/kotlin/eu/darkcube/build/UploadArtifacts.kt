@@ -4,12 +4,11 @@
  * You may not use or redistribute this software or any associated files without permission.
  * The above copyright notice shall be included in all copies of this software.
  */
+@file:Suppress("UsePropertyAccessSyntax")
+
 package eu.darkcube.build
 
-import com.jcraft.jsch.AgentIdentityRepository
-import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.JSch
-import com.jcraft.jsch.PageantConnector
+import com.jcraft.jsch.*
 import org.apache.tools.ant.filters.StringInputStream
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.ConfigurableFileTree
@@ -66,29 +65,27 @@ abstract class UploadArtifacts : DefaultTask() {
         val sftp = connect()
 
         changes.getFileChanges(files).forEach {
-            handleChange(sftp, it)
+            handleChange(remoteDir, sftp, it)
         }
         sftp.exit()
         val time = System.currentTimeMillis() - start
         println("Upload took ${time}ms")
     }
 
-    private fun handleChange(sftp: ChannelSftp, change: FileChange) {
+    private fun handleChange(remoteDir: String, sftp: ChannelSftp, change: FileChange) {
         when (change.changeType) {
             ChangeType.ADDED, ChangeType.MODIFIED -> {
-                uploadFile(sftp, change.file, change.fileType == FileType.DIRECTORY)
+                uploadFile(remoteDir, sftp, change.file, change.fileType == FileType.DIRECTORY)
             }
 
             ChangeType.REMOVED -> {
-                deleteFile(sftp, change.file, change.fileType == FileType.DIRECTORY)
+                deleteFile(remoteDir, sftp, change.file, change.fileType == FileType.DIRECTORY)
             }
-
-            else -> {}
         }
     }
 
-    private fun uploadFile(sftp: ChannelSftp, file: File, directory: Boolean) {
-        val converted = convert(file)
+    private fun uploadFile(remoteDir: String, sftp: ChannelSftp, file: File, directory: Boolean) {
+        val converted = convert(remoteDir, file)
         if (directory) {
             println("Create remote $converted")
             try {
@@ -103,19 +100,19 @@ abstract class UploadArtifacts : DefaultTask() {
         }
     }
 
-    private fun deleteFile(sftp: ChannelSftp, file: File, directory: Boolean) {
+    private fun deleteFile(remoteDir: String, sftp: ChannelSftp, file: File, directory: Boolean) {
         try {
             if (directory) {
-                sftp.rmdir(convert(file))
+                sftp.rmdir(convert(remoteDir, file))
             } else {
-                sftp.rm(convert(file))
+                sftp.rm(convert(remoteDir, file))
             }
         } catch (_: Exception) {
         }
     }
 
-    private fun convert(file: File): String {
-        return (remoteDirectory.get() + file.relativeTo(files.dir)).replace("\\", "/")
+    private fun convert(remoteDir: String, file: File): String {
+        return (remoteDir + file.relativeTo(files.dir)).replace("\\", "/")
     }
 
     private fun connect(): ChannelSftp {
@@ -124,19 +121,28 @@ abstract class UploadArtifacts : DefaultTask() {
         val fingerprint = this.fingerprint.get()
         JSch.setConfig("PreferredAuthentications", "publickey")
         val jsch = JSch()
-//        jsch.instanceLogger = object : Logger {
-//            override fun isEnabled(level: Int): Boolean {
-//                return true
-//            }
-//
-//            override fun log(level: Int, message: String?) {
-//                println(message)
-//            }
-//        }
+        jsch.instanceLogger = object : Logger {
+            override fun isEnabled(level: Int): Boolean {
+                return true
+            }
+
+            override fun log(level: Int, message: String?) {
+                println(message)
+            }
+        }
 
         jsch.setKnownHosts(StringInputStream("$host ssh-ed25519 $fingerprint"))
         val session = jsch.getSession(user, host)
-        val connector = PageantConnector()
+        val connector = try {
+            SSHAgentConnector()
+        } catch (t: Throwable) {
+            try {
+                PageantConnector()
+            } catch (t2: Throwable) {
+                t.addSuppressed(t2)
+                throw t
+            }
+        }
         val repository = AgentIdentityRepository(connector)
 
         session.setIdentityRepository(repository)
