@@ -1,6 +1,6 @@
 [versions]
 adventure = "4.23.0"
-adventure-platform = "4.4.0"
+adventure-platform = "4.4.1"
 
 gson = "2.13.1"
 brigadier = "1.0.18"
