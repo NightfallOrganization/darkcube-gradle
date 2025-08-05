@@ -33,7 +33,7 @@ tasks {
     }
 }
 
-kotlin.jvmToolchain(8)
+kotlin.jvmToolchain(21)
 
 gradlePlugin {
     plugins {
