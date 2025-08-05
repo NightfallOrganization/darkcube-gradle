@@ -12,7 +12,6 @@ import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.attributes.Usage
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.api.component.AdhocComponentWithVariants
-import org.gradle.api.component.SoftwareComponent
 import org.gradle.api.component.SoftwareComponentFactory
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.provider.Provider
@@ -26,13 +25,14 @@ import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.commons.ClassRemapper
 import org.objectweb.asm.commons.Remapper
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Matcher
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
-import kotlin.collections.set
 import kotlin.io.path.*
 
 @Suppress("unused")
@@ -333,13 +333,13 @@ internal class RemapTask(
         if (hasWork) {
             project.logger.lifecycle("SourceRemapper found work. Starting to remap.")
         }
-        artifacts.keys.forEach { remap(hasWork, it) }
+        artifacts.keys.map { remap(hasWork, it) }.forEach { it.join() }
         if (hasWork) {
             project.logger.lifecycle("Remap complete.")
         }
     }
 
-    private fun remap(hasWork: Boolean, id: ModuleVersionIdentifier) {
+    private fun remap(hasWork: Boolean, id: ModuleVersionIdentifier): CompletableFuture<Void> {
         if (!remapped.add(id)) throw IllegalStateException()
 
         val artifact = artifacts[id]!!
@@ -357,11 +357,30 @@ internal class RemapTask(
         )
 
         if (hasWork) {
-            remap(artifact.path, directory.artifact(module))
-            if (sourceArtifact != null) {
-                remapSource(sourceArtifact.path, directory.sourceArtifact(module))
+            val future1 = CompletableFuture<Void>()
+            val future2 = CompletableFuture<Void>()
+            ForkJoinPool.commonPool().submit {
+                try {
+                    remap(artifact.path, directory.artifact(module))
+                } catch (t: Throwable) {
+                    future1.completeExceptionally(t)
+                }
+                future1.complete(null)
             }
+            if (sourceArtifact != null) {
+                ForkJoinPool.commonPool().submit {
+                    try {
+                        remapSource(sourceArtifact.path, directory.sourceArtifact(module))
+                    } catch (t: Throwable) {
+                        future2.completeExceptionally(t)
+                    }
+                    future2.complete(null)
+                }
+            } else future2.complete(null)
+
+            return CompletableFuture.allOf(future1, future2)
         }
+        return CompletableFuture.completedFuture(null)
     }
 
     private fun artifactDirectory(module: Module): Path {
@@ -618,8 +637,9 @@ internal fun createPublications(
 
                     dependencies.forEach {
                         val dependencyElement = element.ownerDocument.createElement("dependency")
-                        dependencyElement.appendChild(element.ownerDocument.createElement("groupId")
-                            .apply { textContent = publishedGroup(projectGroup, projectName, it.group) })
+                        dependencyElement.appendChild(
+                            element.ownerDocument.createElement("groupId")
+                                .apply { textContent = publishedGroup(projectGroup, projectName, it.group) })
                         dependencyElement.appendChild(
                             element.ownerDocument.createElement("artifactId").apply { textContent = it.name })
                         dependencyElement.appendChild(
