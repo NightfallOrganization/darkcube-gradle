@@ -112,7 +112,7 @@ abstract class UploadArtifacts : DefaultTask() {
     }
 
     private fun convert(remoteDir: String, file: File): String {
-        return (remoteDir + file.relativeTo(files.dir)).replace("\\", "/")
+        return (remoteDir + if (file.isFile) "" else file.relativeTo(files.dir)).replace("\\", "/")
     }
 
     private fun connect(): ChannelSftp {
