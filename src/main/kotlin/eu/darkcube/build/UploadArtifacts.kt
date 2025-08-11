@@ -28,6 +28,7 @@ import org.gradle.work.InputChanges
 import java.io.File
 import java.io.FileInputStream
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.nanoseconds
 
 @DisableCachingByDefault
 abstract class UploadArtifacts : DefaultTask() {
@@ -57,10 +58,9 @@ abstract class UploadArtifacts : DefaultTask() {
 
     @TaskAction
     fun run(changes: InputChanges) {
-        val start = System.currentTimeMillis()
+        val start = System.nanoTime()
 
-        var remoteDir = this.remoteDirectory.get()
-        if (!remoteDir.endsWith("/")) remoteDir += "/"
+        val remoteDir = this.remoteDirectory.get()
 
         val sftp = connect()
 
@@ -68,8 +68,8 @@ abstract class UploadArtifacts : DefaultTask() {
             handleChange(remoteDir, sftp, it)
         }
         sftp.exit()
-        val time = System.currentTimeMillis() - start
-        println("Upload took ${time}ms")
+        val time = System.nanoTime() - start
+        println("Upload took ${time.nanoseconds.inWholeMilliseconds}ms")
     }
 
     private fun handleChange(remoteDir: String, sftp: ChannelSftp, change: FileChange) {
