@@ -67,33 +67,16 @@ open class SourceRemapperExtension @Inject constructor(
     }
 
     fun createComponent(
-        sourceConfiguration: NamedDomainObjectProvider<Configuration>,
         vararg remapConfigurations: RemapConfiguration
     ): AdhocComponentWithVariants {
         val component = componentFactory.adhoc("remap-${id.incrementAndGet()}")
-        val artifacts = remapConfigurations.flatMap { it.artifacts }
         project.components.add(component)
         val projectGroup = project.group.toString()
         val projectName = project.name
-        val dependencies = sourceConfiguration.get().allDependencies.mapNotNull {
-            if (it is ExternalModuleDependency) {
-                val foundModule = artifacts.singleOrNull { m ->
-                    m.remappedGroup == it.group && m.remappedArtifact == it.name && m.remappedVersion == it.version
-                }
-                if (foundModule != null) {
-                    return@mapNotNull project.dependencies.create(
-                        group = publishedGroup(projectGroup, projectName, foundModule.group),
-                        name = it.name,
-                        version = project.version.toString(),
-                        configuration = it.targetConfiguration
-                    )
-                } else {
-                    println("Unable to find module for $it")
-                }
-            } else {
-                println("Unknown dependency type in remap: $it")
-            }
-            it
+        val dependencies = remapConfigurations.flatMap { it.artifacts }.map {
+            project.dependencies.create(
+                publishedGroup(projectGroup, projectName, it.group), it.remappedArtifact, project.version.toString()
+            )
         }
 
         val compileConfiguration = project.configurations.create("remapApiElements")
@@ -234,7 +217,6 @@ class RemapComponent internal constructor(
     }
 }
 
-@Suppress("unused")
 class RemapConfiguration internal constructor(
     val namespace: String,
     private val projectVersion: String,
