@@ -5,6 +5,7 @@ bouncycastle = "1.81"
 jna = "5.17.0"
 jsch = "2.27.2"
 asm = "9.8"
+gson = "2.13.1"
 
 [libraries]
 foojay-resolver = { group = "org.gradle.toolchains", name = "foojay-resolver", version.ref = "foojay-resolver" }
@@ -13,6 +14,7 @@ jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 jna-platform = { group = "net.java.dev.jna", name = "jna-platform", version.ref = "jna" }
 jsch = { group = "com.github.mwiede", name = "jsch", version.ref = "jsch" }
 asm-commons = { group = "org.ow2.asm", name = "asm-commons", version.ref = "asm" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
 [plugins]
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

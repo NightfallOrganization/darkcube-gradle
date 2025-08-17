@@ -18,6 +18,7 @@ configurations.api.configure { extendsFrom(embed.get()) }
 
 dependencies {
     implementation(libs.foojay.resolver)
+    embed(libs.gson)
     embed(libs.bcprov.jdk18on)
     embed(libs.jna)
     embed(libs.jna.platform)
