@@ -1,3 +1,7 @@
+import eu.darkcube.build.remapper.Remapped
+import eu.darkcube.build.remapper.RemapperTransform
+import eu.darkcube.build.remapper.InputType
+
 plugins {
     `java-library`
     `maven-publish`
@@ -10,6 +14,15 @@ gradle.taskGraph.whenReady {
     }
 }
 
+repositories {
+    this.ivy {
+        this.content {
+        }
+        this.patternLayout {
+        }
+    }
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -19,49 +32,70 @@ tasks.withType<JavaExec>().configureEach {
     javaLauncher = javaToolchains.launcherFor(java.toolchain)
 }
 
-val embedStep1 = configurations.create("embedStep1")
-val embedStep2 = configurations.create("embedStep2")
+configurations.dependencyScope("embedded")
+val embedded = configurations.named("embedded") {
+    attributes.attribute(Remapped.REMAPPED_ATTRIBUTE, true)
+}
 
+val trs = configurations.resolvable("trs") {
+    extendsFrom(embedded.get())
+}
 
-repositories {
-    mavenCentral()
-    maven("https://libraries.minecraft.net")
+tasks.register<Sync>("testTransformer") {
+    from(trs)
+    into(layout.buildDirectory.dir("testTransformer"))
 }
 
 dependencies {
-    embedStep1(libs.brigadier)
-    embedStep1(libs.gson)
-    embedStep1(libs.annotations)
-    embedStep1(libs.caffeine)
-
-    embedStep2(libs.bundles.adventure) {
-        exclude(group = "com.google.code.gson")
-    }
-}
-
-val step2 = sourceRemapper.remap(embedStep2, "eu.darkcube.system.test.libs", configurations.named("api"))
-val step1 = sourceRemapper.remap(embedStep1, "eu.darkcube.system.test.libs", configurations.named("api"))
-
-val component = sourceRemapper.createComponent(configurations.api, step1, step2)
-configurations["remapApiElements"].attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, java.toolchain.languageVersion.get().asInt())
-configurations["remapRuntimeElements"].attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, java.toolchain.languageVersion.get().asInt())
-artifacts.add("remapApiElements", tasks.jar)
-artifacts.add("remapRuntimeElements", tasks.jar)
-
-component.addVariantsFromConfiguration(configurations.sourcesElements.get()) {
-    this.mapToMavenScope("runtime")
-    this.mapToOptional()
-}
-component.addVariantsFromConfiguration(configurations.javadocElements.get()) {
-    this.mapToMavenScope("runtime")
-    this.mapToOptional()
-}
-
-publishing {
-    publications {
-        register<MavenPublication>("test") {
-
-            from(component)
+    embedded(libs.brigadier) {
+        attributes {
+            attribute(Remapped.REMAPPED_ATTRIBUTE, true)
         }
     }
+    embedded(libs.gson)
+    embedded(libs.annotations)
+    embedded(libs.caffeine)
+    embedded(libs.bundles.adventure) {
+        exclude(group = "com.google.code.gson")
+    }
+
+    attributesSchema {
+        attribute(Remapped.REMAPPED_ATTRIBUTE)
+    }
+
+    api(embedded.map { it.incoming.files })
+
+    artifactTypes.getByName("jar") {
+        attributes.attribute(Remapped.REMAPPED_ATTRIBUTE, false)
+    }
 }
+
+dependencies {
+    registerTransform(RemapperTransform::class) {
+        parameters {
+            namespace = "eu.darkcube.system.test.libs"
+            type = InputType.BINARY
+        }
+
+        from.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+            .attribute(Remapped.REMAPPED_ATTRIBUTE, false)
+        to.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+            .attribute(Remapped.REMAPPED_ATTRIBUTE, true)
+    }
+    registerTransform(RemapperTransform::class) {
+        parameters {
+            namespace = "eu.darkcube.system.test.libs"
+            type = InputType.SOURCES
+        }
+
+        from.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION))
+            .attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
+            .attribute(Remapped.REMAPPED_ATTRIBUTE, false)
+
+        to.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION))
+            .attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
+            .attribute(Remapped.REMAPPED_ATTRIBUTE, true)
+    }
+}
+
+val rescp = configurations.resolvable("ccp") { extendsFrom(configurations.compileClasspath.get()) }
