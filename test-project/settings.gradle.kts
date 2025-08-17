@@ -1,7 +1,8 @@
 pluginManagement {
+    includeBuild("..")
     repositories {
         gradlePluginPortal()
-        mavenLocal()
+//        mavenLocal()
         maven("https://nexus.darkcube.eu/repository/darkcube/") {
             name = "DarkCube"
             credentials(PasswordCredentials::class)
@@ -10,5 +11,5 @@ pluginManagement {
 }
 
 plugins {
-    id("eu.darkcube.darkcube.settings") version "1.9.2"
+    id("eu.darkcube.darkcube.settings")
 }
