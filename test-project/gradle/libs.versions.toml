@@ -6,6 +6,7 @@ gson = "2.13.1"
 brigadier = "1.0.18"
 annotations = "26.0.2"
 caffeine = "3.2.2"
+fastutil = "8.5.16"
 
 [libraries]
 adventure-api = { group = "net.kyori", name = "adventure-api", version.ref = "adventure" }
@@ -19,6 +20,7 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 brigadier = { group = "com.mojang", name = "brigadier", version.ref = "brigadier" }
 annotations = { group = "org.jetbrains", name = "annotations", version.ref = "annotations" }
 caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version.ref = "caffeine" }
+fastutil = { group = "it.unimi.dsi", name = "fastutil", version.ref = "fastutil" }
 
 [bundles]
 adventure = [
