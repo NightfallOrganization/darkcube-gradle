@@ -14,15 +14,6 @@ gradle.taskGraph.whenReady {
     }
 }
 
-repositories {
-    this.ivy {
-        this.content {
-        }
-        this.patternLayout {
-        }
-    }
-}
-
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -34,27 +25,52 @@ tasks.withType<JavaExec>().configureEach {
 
 configurations.dependencyScope("embedded")
 val embedded = configurations.named("embedded") {
-    attributes.attribute(Remapped.REMAPPED_ATTRIBUTE, true)
 }
 
-val trs = configurations.resolvable("trs") {
+val embeddedRuntime = configurations.resolvable("embeddedRuntime") {
     extendsFrom(embedded.get())
+    attributes {
+        attribute(Remapped.REMAPPED_ATTRIBUTE, true)
+    }
+}
+val embeddedSources = configurations.resolvable("embeddedSources") {
+    extendsFrom(embedded.get())
+
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME));
+    }
+    attributes {
+        attribute(Remapped.REMAPPED_ATTRIBUTE, true)
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION));
+        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL));
+        attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES));
+    }
 }
 
 tasks.register<Sync>("testTransformer") {
-    from(trs)
+    from(embeddedSources.map {
+        it.incoming.artifactView {
+            withVariantReselection()
+        }
+    }.map { it.files }) {
+        into("sources")
+    }
+    from(embeddedRuntime.map { it.files }) {
+        into("runtime")
+    }
     into(layout.buildDirectory.dir("testTransformer"))
 }
 
+configurations.api {
+    extendsFrom(embedded.get())
+}
+
 dependencies {
-    embedded(libs.brigadier) {
-        attributes {
-            attribute(Remapped.REMAPPED_ATTRIBUTE, true)
-        }
-    }
+    embedded(libs.brigadier)
     embedded(libs.gson)
     embedded(libs.annotations)
     embedded(libs.caffeine)
+    embedded(libs.fastutil)
     embedded(libs.bundles.adventure) {
         exclude(group = "com.google.code.gson")
     }
@@ -62,8 +78,6 @@ dependencies {
     attributesSchema {
         attribute(Remapped.REMAPPED_ATTRIBUTE)
     }
-
-    api(embedded.map { it.incoming.files })
 
     artifactTypes.getByName("jar") {
         attributes.attribute(Remapped.REMAPPED_ATTRIBUTE, false)
@@ -89,12 +103,12 @@ dependencies {
         }
 
         from.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION))
-            .attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
-            .attribute(Remapped.REMAPPED_ATTRIBUTE, false)
+        from.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
+        from.attribute(Remapped.REMAPPED_ATTRIBUTE, false)
 
         to.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION))
-            .attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
-            .attribute(Remapped.REMAPPED_ATTRIBUTE, true)
+        to.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
+        to.attribute(Remapped.REMAPPED_ATTRIBUTE, true)
     }
 }
 
