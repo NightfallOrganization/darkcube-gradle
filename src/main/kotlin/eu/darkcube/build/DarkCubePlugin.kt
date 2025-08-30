@@ -1,5 +1,6 @@
 package eu.darkcube.build
 
+import eu.darkcube.build.remapper.RemapperExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.repositories.PasswordCredentials
@@ -113,5 +114,6 @@ class DarkCubePlugin : Plugin<Project> {
         }
         val remapperExtension = project.extensions.create<SourceRemapperExtension>("sourceRemapper")
         remapperExtension.setupIvyRepository()
+        project.extensions.create<RemapperExtension>("remapper")
     }
 }
