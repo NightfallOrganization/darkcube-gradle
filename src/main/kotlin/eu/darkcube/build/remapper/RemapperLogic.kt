@@ -17,7 +17,7 @@ import java.util.zip.ZipOutputStream
 import kotlin.io.path.*
 
 internal class RemapperInstance(
-    namespace: String, private val type: InputType, file: Path, dependencies: Iterable<Path>
+    namespace: String, private val type: InputType, private val file: Path, dependencies: Iterable<Path>
 ) {
 
     companion object {
@@ -80,7 +80,7 @@ internal class RemapperInstance(
         }
     }
 
-    fun remap(file: Path, destination: Path) {
+    fun remapTo(destination: Path) {
         ZipInputStream(file.inputStream().buffered()).use { input ->
             destination.parent.createDirectories()
             ZipOutputStream(destination.outputStream().buffered()).use { output ->

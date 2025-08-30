@@ -1,5 +1,6 @@
 package eu.darkcube.build
 
+import eu.darkcube.build.remapper.RemappedDependency
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.nio.file.Path
@@ -20,8 +21,7 @@ private const val XSI = XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI
 private const val IVY = "http://ant.apache.org/ivy/schemas/ivy.xsd"
 
 internal fun writeIvyModule(
-    module: Module,
-    dependencies: List<Module>
+    module: Module, dependencies: List<Module>
 ): String = ByteArrayOutputStream().use { outputStream ->
     val writer = OUTPUT_FACTORY.createXMLStreamWriter(outputStream, Charsets.UTF_8.name())
 
@@ -53,9 +53,17 @@ internal fun writeIvyModule(
 }
 
 internal fun Path.sha256asHex(): String = inputStream().use { input -> input.sha256() }.asHexString()
+internal fun Path.sha512asHex(): String = inputStream().use { input -> input.sha512() }.asHexString()
 
 internal fun InputStream.sha256(): ByteArray {
-    val digest = MessageDigest.getInstance("SHA-256")
+    return hash(MessageDigest.getInstance("SHA-256"))
+}
+
+internal fun InputStream.sha512(): ByteArray {
+    return hash(MessageDigest.getInstance("SHA-512"))
+}
+
+internal fun InputStream.hash(digest: MessageDigest): ByteArray {
     val buffer = ByteArray(8192)
     while (true) {
         val count = read(buffer)
@@ -79,8 +87,11 @@ internal fun ByteArray.asHexString(): String {
     return String(chars)
 }
 
-internal data class Module(
+data class Module(
     val group: String,
     val name: String,
     val version: String,
-)
+) {
+    fun remapped(namespace: String, version: String = this.version) =
+        Module("$namespace.${group}", name, version)
+}

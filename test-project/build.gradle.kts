@@ -1,7 +1,3 @@
-import eu.darkcube.build.remapper.Remapped
-import eu.darkcube.build.remapper.RemapperTransform
-import eu.darkcube.build.remapper.InputType
-
 plugins {
     `java-library`
     `maven-publish`
@@ -24,45 +20,36 @@ tasks.withType<JavaExec>().configureEach {
 }
 
 configurations.dependencyScope("embedded")
-val embedded = configurations.named("embedded") {
-}
-
-val embeddedRuntime = configurations.resolvable("embeddedRuntime") {
-    extendsFrom(embedded.get())
-    attributes {
-        attribute(Remapped.REMAPPED_ATTRIBUTE, true)
-    }
-}
-val embeddedSources = configurations.resolvable("embeddedSources") {
-    extendsFrom(embedded.get())
-
-    attributes {
-        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME));
-    }
-    attributes {
-        attribute(Remapped.REMAPPED_ATTRIBUTE, true)
-        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION));
-        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL));
-        attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES));
-    }
-}
+val embedded = configurations.named("embedded") {}
+val remapped = remapper.remap("eu.darkcube.system.libs.test", embedded)
 
 tasks.register<Sync>("testTransformer") {
-    from(embeddedSources.map {
-        it.incoming.artifactView {
-            withVariantReselection()
-        }
-    }.map { it.files }) {
+    from(remapped.sourceConfiguration) {
         into("sources")
     }
-    from(embeddedRuntime.map { it.files }) {
+    from(remapped.runtimeConfiguration) {
         into("runtime")
+    }
+
+    from(remapped.remappedSourceConfiguration) {
+        into("remappedSources")
+    }
+    from(remapped.remappedRuntimeConfiguration) {
+        into("remappedRuntime")
     }
     into(layout.buildDirectory.dir("testTransformer"))
 }
 
+configurations {
+    sourcesElements {
+        extendsFrom(remapped.remappedSourceConfiguration.get())
+    }
+    runtimeElements {
+        extendsFrom(remapped.remappedRuntimeConfiguration.get())
+    }
+}
 configurations.api {
-    extendsFrom(embedded.get())
+    extendsFrom(remapped.remappedRuntimeConfiguration.get())
 }
 
 dependencies {
@@ -74,42 +61,4 @@ dependencies {
     embedded(libs.bundles.adventure) {
         exclude(group = "com.google.code.gson")
     }
-
-    attributesSchema {
-        attribute(Remapped.REMAPPED_ATTRIBUTE)
-    }
-
-    artifactTypes.getByName("jar") {
-        attributes.attribute(Remapped.REMAPPED_ATTRIBUTE, false)
-    }
 }
-
-dependencies {
-    registerTransform(RemapperTransform::class) {
-        parameters {
-            namespace = "eu.darkcube.system.test.libs"
-            type = InputType.BINARY
-        }
-
-        from.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
-            .attribute(Remapped.REMAPPED_ATTRIBUTE, false)
-        to.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
-            .attribute(Remapped.REMAPPED_ATTRIBUTE, true)
-    }
-    registerTransform(RemapperTransform::class) {
-        parameters {
-            namespace = "eu.darkcube.system.test.libs"
-            type = InputType.SOURCES
-        }
-
-        from.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION))
-        from.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
-        from.attribute(Remapped.REMAPPED_ATTRIBUTE, false)
-
-        to.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.DOCUMENTATION))
-        to.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.SOURCES))
-        to.attribute(Remapped.REMAPPED_ATTRIBUTE, true)
-    }
-}
-
-val rescp = configurations.resolvable("ccp") { extendsFrom(configurations.compileClasspath.get()) }

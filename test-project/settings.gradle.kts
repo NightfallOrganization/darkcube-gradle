@@ -12,3 +12,5 @@ pluginManagement {
 plugins {
     id("eu.darkcube.darkcube.settings")
 }
+
+include("subproject")

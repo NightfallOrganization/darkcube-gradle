@@ -37,7 +37,7 @@ abstract class RemapperTransform : TransformAction<RemapperTransform.Parameters>
         val dst = outputs.file(inputFile.fileName.toString()).toPath()
         val remapper = RemapperInstance(namespace, params.type, inputFile, dependencies.files.map { it.toPath() })
 
-        remapper.remap(primaryInput.get().asFile.toPath(), dst)
+        remapper.remapTo(dst)
         val took = System.nanoTime() - start
         logger.info("Remapping ${inputFile.fileName}(${params.type}) took ${TimeUnit.NANOSECONDS.toMillis(took)}ms")
     }
@@ -48,6 +48,5 @@ abstract class RemapperTransform : TransformAction<RemapperTransform.Parameters>
 
         @get:Input
         var type: InputType
-
     }
 }
