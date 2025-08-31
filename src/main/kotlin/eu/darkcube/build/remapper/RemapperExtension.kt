@@ -122,6 +122,8 @@ open class RemapperExtension @Inject constructor(
         println(repository.uri)
 
         return RemappedConfiguration(
+            project,
+            componentFactory,
             namespace,
             runtimeConfiguration,
             sourceConfiguration,
