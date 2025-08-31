@@ -15,16 +15,29 @@ class RemappedRepository(cachesPath: Path) {
     val uri: URI
         get() = repositoryPath.toUri()
 
+    /**
+     * @return true if done work
+     */
     fun ensureIntegrity(
+        projectGroup: String,
+        projectName: String,
         namespace: String,
         version: String,
         resolvedModule: ResolvedModule,
         inputType: InputType,
         dependencies: Supplier<out Iterable<ResolvedModule>>
-    ) {
-        val remappedDependency = resolvedModule.module.remapped(namespace, version)
-        val path = path(remappedDependency, inputType)
-        if (path.verifyIntegrity()) return
+    ): Boolean {
+        val remappedDependency = resolvedModule.module.remapped(projectGroup, projectName, version)
+        val path = path(
+            projectGroup,
+            projectName,
+            version,
+            resolvedModule.module.group,
+            resolvedModule.module.name,
+            remappedDependency,
+            inputType
+        )
+        if (path.verifyIntegrity()) return false
 
         val start = System.nanoTime()
         val dependencies = dependencies.get()
@@ -33,10 +46,11 @@ class RemappedRepository(cachesPath: Path) {
         path.saveIntegrity()
         writeIvyXml(
             remappedDependency,
-            dependencies.map { it.module.remapped(namespace, version) },
+            dependencies.map { it.module.remapped(projectGroup, projectName, version) },
             path.resolveSibling("ivy-${remappedDependency.version}.xml")
         )
         logger.info("Remapping ${resolvedModule.file.fileName}($inputType) took ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)}ms")
+        return true
     }
 
     private fun writeIvyXml(module: Module, dependencies: List<Module>, destination: Path) {
@@ -46,19 +60,50 @@ class RemappedRepository(cachesPath: Path) {
         destination.saveIntegrity()
     }
 
-    private fun path(remappedDependency: Module, inputType: InputType): Path {
+    private fun path(
+        projectGroup: String,
+        projectName: String,
+        projectVersion: String,
+        originalGroup: String,
+        originalName: String,
+        remappedDependency: Module,
+        inputType: InputType
+    ): Path {
         return when (inputType) {
-            InputType.BINARY -> artifactPath(remappedDependency)
-            InputType.SOURCES -> sourcesPath(remappedDependency)
+            InputType.BINARY -> artifactPath(
+                projectGroup, projectName, projectVersion, originalGroup, originalName, remappedDependency
+            )
+
+            InputType.SOURCES -> sourcesPath(
+                projectGroup, projectName, projectVersion, originalGroup, originalName, remappedDependency
+            )
         }
     }
 
-    private fun sourcesPath(remappedDependency: Module): Path {
-        return artifactDirectory(remappedDependency).resolve("${remappedDependency.name}-${remappedDependency.version}-sources.jar")
+    fun sourcesPath(
+        projectGroup: String,
+        projectName: String,
+        projectVersion: String,
+        originalGroup: String,
+        originalName: String,
+        remappedDependency: Module
+    ): Path {
+        return artifactDirectory(
+            projectGroup, projectName, projectVersion, originalGroup, originalName
+        ).resolve("${remappedDependency.name}-${remappedDependency.version}-sources.jar")
     }
 
-    private fun artifactPath(remappedDependency: Module): Path {
-        return artifactDirectory(remappedDependency).resolve("${remappedDependency.name}-${remappedDependency.version}.jar")
+    fun artifactPath(
+        projectGroup: String,
+        projectName: String,
+        projectVersion: String,
+        originalGroup: String,
+        originalName: String,
+        remappedDependency: Module
+    ): Path {
+        return artifactDirectory(
+            projectGroup, projectName, projectVersion, originalGroup, originalName
+        ).resolve("${remappedDependency.name}-${remappedDependency.version}.jar")
     }
 
     private fun Path.verifyIntegrity(): Boolean {
@@ -78,10 +123,10 @@ class RemappedRepository(cachesPath: Path) {
         return resolveSibling("$name.sha512")
     }
 
-    private fun artifactDirectory(remappedDependency: Module): Path =
-        repositoryPath.resolve(remappedDependency.group.replace('.', '/')).resolve(
-            remappedDependency.name
-        ).resolve(remappedDependency.version)
+    private fun artifactDirectory(
+        projectGroup: String, projectName: String, projectVersion: String, originalGroup: String, originalName: String
+    ): Path = repositoryPath.resolve(projectGroup.replace('.', '/')).resolve(projectName)
+        .resolve(originalGroup.replace('.', '/')).resolve(originalName).resolve(projectVersion)
 
     companion object {
         private val logger = LoggerFactory.getLogger(RemappedRepository::class.java)

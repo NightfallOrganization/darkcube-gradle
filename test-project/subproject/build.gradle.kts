@@ -3,10 +3,18 @@ plugins {
     id("eu.darkcube.darkcube")
 }
 
-repositories {
-    mavenCentral()
-}
+//repositories {
+//    mavenCentral()
+//}
 
 dependencies {
-    api(rootProject)
+    api(project(":"))
+}
+
+tasks.register("testabc") {
+    doFirst {
+        configurations.compileClasspath.get().resolve().forEach {
+            println(it)
+        }
+    }
 }

@@ -1,6 +1,6 @@
 package eu.darkcube.build
 
-import eu.darkcube.build.remapper.RemappedDependency
+import eu.darkcube.build.remapper.dependencyGroup
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.nio.file.Path
@@ -92,6 +92,6 @@ data class Module(
     val name: String,
     val version: String,
 ) {
-    fun remapped(namespace: String, version: String = this.version) =
-        Module("$namespace.${group}", name, version)
+    fun remapped(projectGroup: String, projectName: String, version: String) =
+        Module(dependencyGroup(projectGroup, projectName, group), name, version)
 }

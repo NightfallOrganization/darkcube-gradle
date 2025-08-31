@@ -112,8 +112,6 @@ class DarkCubePlugin : Plugin<Project> {
         project.tasks.withType<AbstractArchiveTask>().configureEach {
             archiveVersion.convention("")
         }
-        val remapperExtension = project.extensions.create<SourceRemapperExtension>("sourceRemapper")
-        remapperExtension.setupIvyRepository()
         project.extensions.create<RemapperExtension>("remapper")
     }
 }
