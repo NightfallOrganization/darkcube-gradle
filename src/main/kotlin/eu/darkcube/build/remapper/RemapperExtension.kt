@@ -83,7 +83,6 @@ open class RemapperExtension @Inject constructor(
             addDependencies(namespace, projectVersion, resolved, dependencyHandler)
 
             project.afterEvaluate {
-                println("Pre resolve remapped runtime")
                 val moduleFiles = resolved.get()
                 val deps = resolvedDependencies.get()
 
@@ -104,7 +103,6 @@ open class RemapperExtension @Inject constructor(
             addDependencies(namespace, projectVersion, resolved, dependencyHandler, "sources")
 
             project.afterEvaluate {
-                println("Pre resolve remapped sources")
                 val moduleFiles = resolved.get()
                 val deps = resolvedDependencies.get()
 
