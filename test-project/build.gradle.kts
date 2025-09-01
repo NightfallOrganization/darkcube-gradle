@@ -29,6 +29,13 @@ dependencies {
 }
 
 configurations.api { extendsFrom(remapped.remappedRuntimeConfiguration.get()) }
-configurations.sourcesElements { extendsFrom(remapped.remappedSourceConfiguration.get()) }
 
 remapped.createPublications()
+
+publishing {
+    publications {
+        register<MavenPublication>("maven") {
+            from(components["java"])
+        }
+    }
+}

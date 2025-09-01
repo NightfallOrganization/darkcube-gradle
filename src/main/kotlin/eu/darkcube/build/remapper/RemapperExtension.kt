@@ -11,10 +11,12 @@ import org.gradle.api.artifacts.ExternalModuleDependency
 import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository
 import org.gradle.api.artifacts.repositories.RepositoryContentDescriptor
+import org.gradle.api.attributes.*
 import org.gradle.api.component.SoftwareComponentFactory
 import org.gradle.api.provider.Provider
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.mapProperty
+import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.repositories
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -90,6 +92,12 @@ open class RemapperExtension @Inject constructor(
                 dependencyHandler,
                 InputType.BINARY
             )
+            attributes {
+                attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API))
+                attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+                attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR))
+                attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+            }
         }
         val remappedSourceConfiguration = project.configurations.resolvable("${configuration.name}RemappedSource") {
             isVisible = false
@@ -104,8 +112,15 @@ open class RemapperExtension @Inject constructor(
                 resolvedDependencies,
                 dependencyHandler,
                 InputType.SOURCES,
-                "sources"
+                "sources",
+                false
             )
+            attributes {
+                attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
+                attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.DOCUMENTATION))
+                attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+                attribute(DocsType.DOCS_TYPE_ATTRIBUTE, project.objects.named(DocsType.SOURCES))
+            }
         }
 
         val modules = resolvedDependencies.map { it.values }
@@ -183,7 +198,8 @@ open class RemapperExtension @Inject constructor(
         resolvedDependencies: Provider<out Map<Module, ResolvedDependencyTree>>,
         dependencyHandler: DependencyHandler,
         inputType: InputType,
-        classifier: String? = null
+        classifier: String? = null,
+        transitive: Boolean = true
     ) = addDependencies(resolved.map { it.keys }.map {
         it.apply {
             ensureFilesAreInRepository(
@@ -193,7 +209,9 @@ open class RemapperExtension @Inject constructor(
     }) {
         dependencyHandler.create(
             dependencyGroup(projectGroup, projectName, it.group), it.name, version, classifier = classifier
-        )
+        ).apply {
+            isTransitive = transitive
+        }
     }
 
     private fun Configuration.addDependencies(
