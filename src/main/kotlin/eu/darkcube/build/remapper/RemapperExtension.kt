@@ -203,7 +203,7 @@ open class RemapperExtension @Inject constructor(
     ) = addDependencies(resolvedDependencies.map { it.keys }) {
         dependencyHandler.create(
             it.group, it.name, it.version, classifier = classifier
-        )
+        ).apply { isTransitive = false }
     }
 
     private fun Configuration.addDependencies(
@@ -211,7 +211,7 @@ open class RemapperExtension @Inject constructor(
     ) {
         dependencies.addAllLater(resolvedDependencies.map { iterable ->
             iterable.map {
-                dependencyCreator(it).apply { isTransitive = false }
+                dependencyCreator(it)
             }
         })
     }
