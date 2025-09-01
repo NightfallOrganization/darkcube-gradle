@@ -48,7 +48,7 @@ class RemappedConfiguration(
                         val artifactPath = repository.artifactPath(
                             projectGroup, projectName, projectVersion, originalGroup, originalName, remappedModule
                         )
-                        val sourcesPath = repository.artifactPath(
+                        val sourcesPath = repository.sourcesPath(
                             projectGroup, projectName, projectVersion, originalGroup, originalName, remappedModule
                         )
                         this.artifact(artifactPath)
