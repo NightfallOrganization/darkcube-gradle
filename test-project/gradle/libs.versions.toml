@@ -2,7 +2,7 @@
 adventure = "4.24.0"
 adventure-platform = "4.4.1"
 
-gson = "2.13.1"
+gson = "2.13.2"
 brigadier = "1.0.18"
 annotations = "26.0.2"
 caffeine = "3.2.2"

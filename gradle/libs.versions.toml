@@ -5,7 +5,7 @@ bouncycastle = "1.81"
 jna = "5.17.0"
 jsch = "2.27.3"
 asm = "9.8"
-gson = "2.13.1"
+gson = "2.13.2"
 
 [libraries]
 foojay-resolver = { group = "org.gradle.toolchains", name = "foojay-resolver", version.ref = "foojay-resolver" }
